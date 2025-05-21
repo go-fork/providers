@@ -2,6 +2,7 @@ package log
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/go-fork/providers/log/handler"
@@ -41,6 +42,21 @@ func TestNewManager(t *testing.T) {
 	if m == nil {
 		t.Fatal("NewManager() trả về nil")
 	}
+
+	// Kiểm tra kiểu đúng
+	_, ok := m.(*DefaultManager)
+	if !ok {
+		t.Errorf("NewManager() không trả về *DefaultManager, got %T", m)
+	}
+
+	// Kiểm tra các thuộc tính mặc định
+	defaultManager := m.(*DefaultManager)
+	if defaultManager.minLevel != handler.InfoLevel {
+		t.Errorf("Manager mới không đặt minLevel mặc định là InfoLevel, got %v", defaultManager.minLevel)
+	}
+	if len(defaultManager.handlers) != 0 {
+		t.Errorf("Manager mới không có handlers trống, got %d handlers", len(defaultManager.handlers))
+	}
 }
 
 func TestDefaultManagerAddHandler(t *testing.T) {
@@ -53,6 +69,32 @@ func TestDefaultManagerAddHandler(t *testing.T) {
 	// Kiểm tra handler được thêm đúng cách
 	if _, ok := m.handlers["test"]; !ok {
 		t.Errorf("AddHandler không thêm handler vào map")
+	}
+
+	// Thêm handler thứ hai
+	h2 := &MockHandler{}
+	m.AddHandler("test2", h2)
+
+	// Kiểm tra cả hai handler tồn tại
+	if _, ok := m.handlers["test"]; !ok {
+		t.Errorf("Handler đầu tiên không còn tồn tại sau khi thêm handler thứ hai")
+	}
+	if _, ok := m.handlers["test2"]; !ok {
+		t.Errorf("Handler thứ hai không được thêm vào map")
+	}
+
+	// Ghi đè lên handler cũ - Lưu ý: Theo hiện thực hiện tại, AddHandler
+	// không gọi Close() trên handler cũ khi ghi đè, chỉ đơn giản thay thế nó
+	h3 := &MockHandler{}
+	m.AddHandler("test", h3)
+
+	// Xác minh rằng h3 thay thế h trong map
+	handler, ok := m.handlers["test"]
+	if !ok {
+		t.Error("Handler 'test' không tồn tại sau khi ghi đè")
+	}
+	if handler != h3 {
+		t.Error("Handler không được ghi đè đúng cách")
 	}
 }
 
@@ -71,8 +113,26 @@ func TestDefaultManagerRemoveHandler(t *testing.T) {
 		t.Error("RemoveHandler không gọi Close() trên handler")
 	}
 
+	// Kiểm tra handler đã bị xóa khỏi map
+	defaultManager := m.(*DefaultManager)
+	if _, ok := defaultManager.handlers["test"]; ok {
+		t.Error("RemoveHandler không xóa handler khỏi map")
+	}
+
 	// Xóa handler không tồn tại không gây lỗi
 	m.RemoveHandler("nonexistent")
+
+	// Thêm handler có lỗi khi close
+	h2 := &MockHandler{ShouldError: true}
+	m.AddHandler("test2", h2)
+
+	// RemoveHandler vẫn nên xóa handler ngay cả khi Close() gây lỗi
+	m.RemoveHandler("test2")
+
+	// Kiểm tra handler đã bị xóa khỏi map dù Close() lỗi
+	if _, ok := defaultManager.handlers["test2"]; ok {
+		t.Error("RemoveHandler không xóa handler khỏi map khi Close() lỗi")
+	}
 }
 
 func TestSetMinLevel(t *testing.T) {
@@ -91,12 +151,26 @@ func TestSetMinLevel(t *testing.T) {
 		t.Errorf("SetMinLevel không đặt minLevel đúng, got %v, want %v",
 			m.minLevel, handler.WarningLevel)
 	}
+
+	// Đặt mức thấp nhất
+	m.SetMinLevel(handler.DebugLevel)
+	if m.minLevel != handler.DebugLevel {
+		t.Errorf("SetMinLevel không đặt minLevel thành DebugLevel, got %v", m.minLevel)
+	}
+
+	// Đặt mức cao nhất
+	m.SetMinLevel(handler.FatalLevel)
+	if m.minLevel != handler.FatalLevel {
+		t.Errorf("SetMinLevel không đặt minLevel thành FatalLevel, got %v", m.minLevel)
+	}
 }
 
 func TestLogMethods(t *testing.T) {
 	m := NewManager()
 	h := &MockHandler{}
 
+	// Set min level to DebugLevel to ensure Debug logs are processed
+	m.SetMinLevel(handler.DebugLevel)
 	m.AddHandler("test", h)
 
 	tests := []struct {
@@ -116,12 +190,11 @@ func TestLogMethods(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			h.LogCalled = false
-			h.LogLevel = 0
 			h.LogMessage = ""
-			h.LogArgs = nil
 
-			// Gọi method
-			tt.logFunc(tt.message, tt.args...)
+			// Gọi method với message có định dạng
+			formattedMsg := fmt.Sprintf("%s %%d %%d", tt.message)
+			tt.logFunc(formattedMsg, tt.args...)
 
 			// Kiểm tra handler được gọi với tham số đúng
 			if !h.LogCalled {
@@ -130,14 +203,12 @@ func TestLogMethods(t *testing.T) {
 			if h.LogLevel != tt.level {
 				t.Errorf("%s truyền sai log level: got %v, want %v", tt.name, h.LogLevel, tt.level)
 			}
-			if h.LogMessage != tt.message {
-				t.Errorf("%s truyền sai message: got %q, want %q", tt.name, h.LogMessage, tt.message)
-			}
 
-			// Kiểm tra args
-			if len(h.LogArgs) != len(tt.args) {
-				t.Errorf("%s truyền sai số lượng args: got %d, want %d",
-					tt.name, len(h.LogArgs), len(tt.args))
+			// Kiểm tra message được định dạng đúng
+			expectedMsg := fmt.Sprintf(formattedMsg, tt.args...)
+			if h.LogMessage != expectedMsg {
+				t.Errorf("%s không định dạng message đúng: got %q, want %q",
+					tt.name, h.LogMessage, expectedMsg)
 			}
 		})
 	}
@@ -164,15 +235,24 @@ func TestDefaultManagerClose(t *testing.T) {
 	if !h2.CloseCalled {
 		t.Error("Close không gọi Close() trên handler thứ hai")
 	}
+
+	// Lưu ý: Theo hiện thực hiện tại, Close() không xóa các handlers khỏi map
+	// Nó chỉ đóng các handlers nhưng vẫn giữ chúng trong map
+	defaultManager := m.(*DefaultManager)
+	if len(defaultManager.handlers) == 0 {
+		t.Error("Không mong đợi map handlers trống sau khi close, hiện thực chỉ đóng handlers")
+	}
 }
 
 func TestDefaultManagerCloseWithError(t *testing.T) {
 	m := NewManager()
 	h1 := &MockHandler{}
 	h2 := &MockHandler{ShouldError: true}
+	h3 := &MockHandler{}
 
 	m.AddHandler("h1", h1)
 	m.AddHandler("h2", h2)
+	m.AddHandler("h3", h3)
 
 	// Test Close method với handler trả về lỗi
 	err := m.Close()
@@ -180,12 +260,9 @@ func TestDefaultManagerCloseWithError(t *testing.T) {
 		t.Error("Close với handler lỗi không trả về lỗi")
 	}
 
-	// Kiểm tra cả hai handlers được đóng dù có lỗi
-	if !h1.CloseCalled {
-		t.Error("Close không gọi Close() trên handler đầu tiên khi handler thứ hai lỗi")
-	}
-	if !h2.CloseCalled {
-		t.Error("Close không gọi Close() trên handler lỗi")
+	// Kiểm tra tất cả handlers được đóng dù có lỗi
+	if !h1.CloseCalled || !h2.CloseCalled || !h3.CloseCalled {
+		t.Error("Close không gọi Close() trên tất cả handlers")
 	}
 }
 
@@ -229,5 +306,62 @@ func TestLogFilteringByMinLevel(t *testing.T) {
 	m.Fatal("fatal message")
 	if !h.LogCalled {
 		t.Error("Fatal log bị lọc khi bằng hoặc trên ngưỡng")
+	}
+}
+
+// TestLogWithFormatting kiểm tra định dạng thông điệp
+func TestLogWithFormatting(t *testing.T) {
+	m := NewManager()
+	h := &MockHandler{}
+
+	m.AddHandler("test", h)
+
+	// Kiểm tra log với định dạng khác nhau
+	tests := []struct {
+		name   string
+		format string
+		args   []interface{}
+		want   string
+	}{
+		{"String", "Hello %s", []interface{}{"world"}, "Hello world"},
+		{"Number", "Number: %d", []interface{}{42}, "Number: 42"},
+		{"Multiple", "%s: %d, %f", []interface{}{"Test", 123, 45.67}, "Test: 123, 45.670000"},
+		{"Empty", "No args", nil, "No args"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h.LogCalled = false
+			h.LogMessage = ""
+
+			// Gọi phương thức Info với định dạng
+			m.Info(tt.format, tt.args...)
+
+			// Kiểm tra định dạng đúng
+			if !h.LogCalled {
+				t.Error("Log không gọi handler")
+			}
+			if h.LogMessage != tt.want {
+				t.Errorf("Định dạng không đúng: got %q, want %q", h.LogMessage, tt.want)
+			}
+		})
+	}
+}
+
+// TestLogWithErrorHandler kiểm tra xử lý lỗi từ handler
+func TestLogWithErrorHandler(t *testing.T) {
+	m := NewManager()
+	h := &MockHandler{ShouldError: true}
+
+	m.AddHandler("test", h)
+
+	// Log với handler trả về lỗi
+	// Không cần kiểm tra gì vì lỗi chỉ được in ra stderr
+	// Nhưng log call vẫn hoàn thành không bị panic
+	m.Info("this will error")
+
+	// Kiểm tra handler vẫn được gọi dù trả về lỗi
+	if !h.LogCalled {
+		t.Error("Log không gọi handler khi biết handler sẽ lỗi")
 	}
 }
