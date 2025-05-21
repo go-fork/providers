@@ -173,7 +173,7 @@ jobs:
           path: metrics/
       
       - name: Create metrics PR
-        uses: peter-evans/create-pull-request@v5
+        uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "docs: update code metrics report"
