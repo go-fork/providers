@@ -49,7 +49,7 @@ jobs:
       
       - name: Create GitHub Release
         id: create-release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           name: ${{ steps.extract-module.outputs.module }} ${{ steps.extract-module.outputs.version }}
           tag_name: ${{ github.ref_name }}
