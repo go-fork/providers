@@ -1,0 +1,61 @@
+# Cấu hình repository settings
+# https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository
+
+# Cấu hình cài đặt mặc định cho repository
+repository:
+  # Mô tả repository
+  description: "PAMM Providers: A collection of infrastructure providers for the PAMM framework"
+  # URL dự án
+  homepage: "https://github.com/go-fork/pamm"
+  # Các chủ đề liên quan
+  topics:
+    - "go"
+    - "golang"
+    - "framework"
+    - "cache"
+    - "http"
+    - "config"
+    - "logger"
+    - "database"
+    - "providers"
+    - "infrastructure"
+  # Bật wiki
+  has_wiki: true
+  # Bật issues
+  has_issues: true
+  # Bật projects
+  has_projects: true
+  # Bật discussions
+  has_discussions: true
+  # Cho phép squash merging
+  allow_squash_merge: true
+  # Cho phép merge commits
+  allow_merge_commit: true
+  # Cho phép rebase merging
+  allow_rebase_merge: true
+  # Tự động xóa head branch sau khi merge
+  delete_branch_on_merge: true
+  # Cho phép forking
+  allow_forking: true
+  # Cho phép update branch từ UI
+  allow_update_branch: true
+  # Yêu cầu review từ code owners
+  require_code_owner_reviews: true
+
+# Cấu hình bảo vệ branch
+branches:
+  - name: main
+    # Yêu cầu pull request trước khi merge
+    protection:
+      required_pull_request_reviews:
+        required_approving_review_count: 1
+        dismiss_stale_reviews: true
+        require_code_owner_reviews: true
+      # Yêu cầu các checks phải pass
+      required_status_checks:
+        strict: true
+        contexts: ["test", "lint"]
+      # Cấm force push
+      enforce_admins: true
+      # Cấm xóa branch
+      allow_deletions: false

@@ -1,0 +1,35 @@
+# Các maintainer của dự án PAMM Providers
+# Để biết thêm thông tin về tệp CODEOWNERS, hãy xem:
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Mặc định các maintainer sẽ được chỉ định là reviewer cho tất cả các pull request
+*                    @go-fork/maintainers
+
+# Cache provider
+/cache/              @go-fork/cache-team
+
+# Config provider
+/config/             @go-fork/config-team
+
+# HTTP provider và các thành phần liên quan
+/http/               @go-fork/http-team
+/middleware/         @go-fork/http-team
+/adaptor/http/       @go-fork/http-team
+
+# Log provider
+/log/                @go-fork/log-team
+
+# Database providers
+/mongodb/            @go-fork/database-team
+
+# Communication providers
+/mailer/             @go-fork/comm-team
+/sms/                @go-fork/comm-team
+
+# Background processing
+/queue/              @go-fork/background-team
+/scheduler/          @go-fork/background-team
+
+# CI/CD và công cụ
+/.github/            @go-fork/devops-team
+/scripts/            @go-fork/devops-team

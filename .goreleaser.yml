@@ -1,0 +1,110 @@
+# GoReleaser configuration for github.com/go-fork/providers
+
+project_name: providers
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  # Vì đây là một library package nên chúng ta không build binaries
+  # GoReleaser sẽ chủ yếu được sử dụng để tạo release notes và archives
+
+archives:
+  - format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+    files:
+      - README.md
+      - LICENSE
+      - CHANGELOG.md
+      - cache/**/*
+      - config/**/*
+      - http/**/*
+      - log/**/*
+      - middleware/**/*
+      - docs/**/*
+      - examples/**/*
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: "{{ .ProjectName }}_{{ .Version }}_checksums.txt"
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^Merge pull request"
+      - "^Merge branch"
+      - "^WIP"
+  groups:
+    - title: "New Features"
+      regexp: "^feat[(\\w)]*:+.*$"
+      order: 0
+    - title: "Bug Fixes"
+      regexp: "^fix[(\\w)]*:+.*$"
+      order: 1
+    - title: "Performance Improvements"
+      regexp: "^perf[(\\w)]*:+.*$"
+      order: 2
+    - title: "Code Refactoring"
+      regexp: "^refactor[(\\w)]*:+.*$"
+      order: 3
+    - title: "Documentation Updates"
+      regexp: "^docs[(\\w)]*:+.*$"
+      order: 4
+    - title: "Dependencies"
+      regexp: "^deps[(\\w)]*:+.*$"
+      order: 5
+    - title: "Other Changes"
+      order: 999
+
+release:
+  github:
+    owner: go-fork
+    name: providers
+  prerelease: auto
+  mode: replace
+  name_template: "{{ .ProjectName }} {{ .Tag }}"
+  header: |
+    # {{ .ProjectName }} {{ .Tag }}
+    
+    This is a release of the Go-Fork Providers package.
+    
+    ## Installation
+    
+    ```bash
+    go get github.com/go-fork/providers@{{ .Tag }}
+    ```
+    
+    Or for individual modules:
+    
+    ```bash
+    go get github.com/go-fork/providers/cache@{{ .Tag }}
+    go get github.com/go-fork/providers/config@{{ .Tag }}
+    go get github.com/go-fork/providers/http@{{ .Tag }}
+    go get github.com/go-fork/providers/log@{{ .Tag }}
+    go get github.com/go-fork/providers/middleware@{{ .Tag }}
+    ```
+  
+  footer: |
+    ## Requirements
+    
+    - Go 1.23.9 or later
+    
+    ## Documentation
+    
+    For detailed documentation, visit [github.com/go-fork/providers](https://github.com/go-fork/providers)
+
+announce:
+  skip: "{{gt .Patch 0}}"  # Skip announcements for patch releases

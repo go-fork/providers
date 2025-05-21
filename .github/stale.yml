@@ -1,0 +1,49 @@
+# Cấu hình cho stale bot
+# https://github.com/actions/stale
+
+# Số ngày trước khi issue được đánh dấu là stale
+daysUntilStale: 60
+# Số ngày trước khi issue stale sẽ bị đóng
+daysUntilClose: 14
+# Issues với các nhãn này sẽ không bao giờ bị đánh dấu là stale
+exemptLabels:
+  - pinned
+  - security
+  - bug
+  - enhancement
+  - documentation
+# Nhãn để áp dụng khi issue trở thành stale
+staleLabel: stale
+# Comment sẽ được đăng trên issues đánh dấu là stale
+markComment: >
+  Issue này đã không có hoạt động trong 60 ngày và đã được đánh dấu là stale.
+  Issue sẽ tự động đóng sau 14 ngày nữa trừ khi có hoạt động mới hoặc nhãn stale 
+  được loại bỏ. Cảm ơn vì sự đóng góp của bạn!
+# Comment sẽ được đăng trên issues đóng sau khi được đánh dấu là stale
+closeComment: >
+  Issue này đã tự động đóng vì không có hoạt động thêm sau khi được
+  đánh dấu là stale. Vui lòng mở issue mới nếu vấn đề vẫn tồn tại.
+# Chỉ những issues có nhãn cụ thể mới được kiểm tra bởi Stale, để trống để kiểm tra tất cả issues
+onlyLabels: []
+# Stale cũng kiểm tra các pull request
+pulls:
+  # Số ngày trước khi PR được đánh dấu là stale
+  daysUntilStale: 30
+  # Số ngày trước khi PR stale sẽ bị đóng
+  daysUntilClose: 14
+  # PRs với các nhãn này sẽ không bao giờ bị đánh dấu là stale
+  exemptLabels:
+    - pinned
+    - security
+    - work-in-progress
+  # Nhãn để áp dụng khi PR trở thành stale
+  staleLabel: stale
+  # Comment sẽ được đăng trên PRs đánh dấu là stale
+  markComment: >
+    Pull request này đã không có hoạt động trong 30 ngày và đã được đánh dấu là stale.
+    PR sẽ tự động đóng sau 14 ngày nữa trừ khi có hoạt động mới hoặc nhãn stale
+    được loại bỏ. Cảm ơn vì sự đóng góp của bạn!
+  # Comment sẽ được đăng trên PRs đóng sau khi được đánh dấu là stale
+  closeComment: >
+    Pull request này đã tự động đóng vì không có hoạt động thêm sau khi
+    được đánh dấu là stale. Vui lòng mở PR mới nếu vấn đề vẫn tồn tại.

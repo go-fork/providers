@@ -1,0 +1,77 @@
+name: Module Release
+
+on:
+  push:
+    tags:
+      - '*/v*' # Matches tags like cache/v1.0.0, log/v0.2.1, etc.
+
+permissions:
+  contents: write
+
+jobs:
+  module-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.23.x'
+          cache: true
+      
+      - name: Extract module name from tag
+        id: extract-module
+        run: |
+          TAG=${{ github.ref_name }}
+          MODULE=$(echo $TAG | cut -d'/' -f1)
+          VERSION=$(echo $TAG | cut -d'/' -f2)
+          echo "module=$MODULE" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Releasing module: $MODULE, version: $VERSION"
+      
+      - name: Verify module exists
+        run: |
+          MODULE=${{ steps.extract-module.outputs.module }}
+          if [ ! -d "$MODULE" ] || [ ! -f "$MODULE/go.mod" ]; then
+            echo "ERROR: Module directory $MODULE does not exist or doesn't contain go.mod"
+            exit 1
+          fi
+      
+      - name: Run tests for module
+        run: |
+          MODULE=${{ steps.extract-module.outputs.module }}
+          cd $MODULE
+          go test -v -race ./...
+      
+      - name: Create GitHub Release
+        id: create-release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: ${{ steps.extract-module.outputs.module }} ${{ steps.extract-module.outputs.version }}
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          body: |
+            # ${{ steps.extract-module.outputs.module }} ${{ steps.extract-module.outputs.version }}
+            
+            This is a release of the ${{ steps.extract-module.outputs.module }} module.
+            
+            ## Usage
+            
+            ```go
+            go get github.com/go-fork/providers/${{ steps.extract-module.outputs.module }}@${{ github.ref_name }}
+            ```
+            
+            ## Module Details
+            
+            - **Module Path**: `github.com/go-fork/providers/${{ steps.extract-module.outputs.module }}`
+            - **Version**: `${{ steps.extract-module.outputs.version }}`
+            - **Go Version**: 1.23.9
+          files: |
+            ${{ steps.extract-module.outputs.module }}/**/*.go
+            ${{ steps.extract-module.outputs.module }}/go.mod
+            ${{ steps.extract-module.outputs.module }}/go.sum
+            ${{ steps.extract-module.outputs.module }}/README.md

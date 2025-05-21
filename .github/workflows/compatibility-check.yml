@@ -1,0 +1,133 @@
+name: Backwards Compatibility Check
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '**.go'
+      - '**/go.mod'
+  workflow_dispatch:
+
+jobs:
+  check-compatibility:
+    name: API Compatibility Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.23.x'
+          cache: true
+      
+      - name: Install apidiff
+        run: go install golang.org/x/exp/cmd/apidiff@latest
+      
+      - name: Check for breaking API changes
+        run: |
+          # Get the base branch (usually main)
+          BASE_BRANCH="origin/main"
+          
+          # Create a directory for the base branch code
+          mkdir -p base_branch
+          
+          # List of directories with public APIs to check
+          MODULES=($(find . -name "go.mod" -exec dirname {} \; | sort))
+          
+          # Find all exported identifiers in the current code
+          for mod_dir in "${MODULES[@]}"; do
+            # Skip hidden directories
+            if [[ "$mod_dir" == *"/.git"* || "$mod_dir" == *"/tmp"* ]]; then
+              continue
+            fi
+            
+            echo "Checking API compatibility for module: $mod_dir"
+            
+            # Get the module name
+            MODULE_NAME=$(cd "$mod_dir" && go list -m)
+            
+            # Create the module directory structure in the base branch directory
+            mkdir -p "base_branch/$mod_dir"
+            
+            # Get the files from the base branch
+            git show "$BASE_BRANCH:$mod_dir" > /dev/null 2>&1
+            if [ $? -eq 0 ]; then
+              # Copy only .go files, excluding tests
+              git ls-tree -r --name-only "$BASE_BRANCH" "$mod_dir" | grep '\.go$' | grep -v '_test\.go$' | while read -r file; do
+                if git show "$BASE_BRANCH:$file" > /dev/null 2>&1; then
+                  mkdir -p "base_branch/$(dirname "$file")"
+                  git show "$BASE_BRANCH:$file" > "base_branch/$file"
+                fi
+              done
+              
+              # Copy go.mod file
+              if git show "$BASE_BRANCH:$mod_dir/go.mod" > /dev/null 2>&1; then
+                git show "$BASE_BRANCH:$mod_dir/go.mod" > "base_branch/$mod_dir/go.mod"
+              fi
+              
+              # Check if there's a valid Go package in the base branch
+              if compgen -G "base_branch/$mod_dir/*.go" > /dev/null; then
+                echo "Running apidiff for $MODULE_NAME"
+                
+                # Use apidiff to compare the API
+                API_CHANGES=$(cd "$mod_dir" && apidiff "../base_branch/$mod_dir" .)
+                
+                # Check for incompatible changes
+                if echo "$API_CHANGES" | grep -E 'incompatible|removed'; then
+                  echo "⚠️ WARNING: Potentially breaking API changes detected in $MODULE_NAME:"
+                  echo "$API_CHANGES"
+                  echo ""
+                  echo "Please ensure these changes don't break backwards compatibility."
+                  echo "If these are intentional breaking changes, make sure to update the major version."
+                  echo ""
+                else
+                  echo "✅ No breaking API changes detected in $MODULE_NAME"
+                fi
+              else
+                echo "ℹ️ No comparable package found in base branch for $MODULE_NAME"
+              fi
+            else
+              echo "ℹ️ Module $mod_dir not found in base branch"
+            fi
+          done
+      
+      - name: Verify semantic versioning
+        run: |
+          # Check if this PR might include version changes
+          MODULES=($(find . -name "go.mod" -exec dirname {} \; | sort))
+          
+          for mod_dir in "${MODULES[@]}"; do
+            # Skip hidden directories
+            if [[ "$mod_dir" == *"/.git"* || "$mod_dir" == *"/tmp"* ]]; then
+              continue
+            fi
+            
+            # Get current module version
+            cd "$mod_dir"
+            MODULE_NAME=$(go list -m)
+            
+            # If we have version information
+            if [[ "$MODULE_NAME" =~ v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+              CURRENT_VERSION="${BASH_REMATCH[0]}"
+              
+              # Parse version components
+              if [[ "$CURRENT_VERSION" =~ v([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+                MAJOR="${BASH_REMATCH[1]}"
+                MINOR="${BASH_REMATCH[2]}"
+                PATCH="${BASH_REMATCH[3]}"
+                
+                # If we detected breaking changes and major version is not incremented
+                if [ -n "$API_CHANGES" ] && echo "$API_CHANGES" | grep -E 'incompatible|removed'; then
+                  echo "⚠️ WARNING: Breaking changes detected in $MODULE_NAME"
+                  echo "Current version: v$MAJOR.$MINOR.$PATCH"
+                  echo "Consider increasing the major version number."
+                fi
+              fi
+            fi
+            
+            cd - > /dev/null
+          done

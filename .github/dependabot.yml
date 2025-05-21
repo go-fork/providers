@@ -1,0 +1,91 @@
+version: 2
+updates:
+  # Cập nhật các Go dependencies
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    target-branch: "develop"
+    labels:
+      - "dependencies"
+      - "go"
+    assignees:
+      - "go-fork/maintainers"
+    reviewers:
+      - "go-fork/maintainers"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+  
+  # Cập nhật các Go dependencies trong thư mục cache
+  - package-ecosystem: "gomod"
+    directory: "/cache"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "cache"
+    assignees:
+      - "go-fork/cache-team"
+    reviewers:
+      - "go-fork/cache-team"
+  
+  # Cập nhật các Go dependencies trong thư mục config
+  - package-ecosystem: "gomod"
+    directory: "/config"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "config"
+    assignees:
+      - "go-fork/config-team"
+    reviewers:
+      - "go-fork/config-team"
+  
+  # Cập nhật các Go dependencies trong thư mục http
+  - package-ecosystem: "gomod"
+    directory: "/http"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "http"
+    assignees:
+      - "go-fork/http-team"
+    reviewers:
+      - "go-fork/http-team"
+  
+  # Cập nhật các Go dependencies trong thư mục log
+  - package-ecosystem: "gomod"
+    directory: "/log"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "log"
+    assignees:
+      - "go-fork/log-team"
+    reviewers:
+      - "go-fork/log-team"
+  
+  # Cập nhật GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
+    assignees:
+      - "go-fork/devops-team"
+    reviewers:
+      - "go-fork/devops-team"

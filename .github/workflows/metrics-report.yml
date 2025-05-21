@@ -1,0 +1,194 @@
+name: Code Metrics Report
+
+on:
+  push:
+    branches: [ main ]
+  schedule:
+    - cron: '0 0 1 * *' # Run at midnight on the first day of each month
+  workflow_dispatch:
+
+jobs:
+  generate-metrics:
+    name: Generate Code Metrics
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full git history for metrics
+      
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.23.x'
+          cache: true
+      
+      - name: Install analysis tools
+        run: |
+          go install github.com/boyter/scc@latest
+          go install github.com/prantlf/go-teststat@latest
+          go install github.com/kisielk/godepgraph@latest
+      
+      - name: Collect basic code metrics
+        run: |
+          mkdir -p metrics
+          
+          # Generate SCC metrics
+          echo "Generating source code metrics..."
+          scc --format=json --output=metrics/code-metrics.json .
+          
+          # Generate HTML report
+          scc --format=html --output=metrics/code-metrics.html .
+          
+          # Generate summary
+          echo "## Code Metrics Summary" > metrics/SUMMARY.md
+          echo "" >> metrics/SUMMARY.md
+          echo "Generated on: $(date)" >> metrics/SUMMARY.md
+          echo "" >> metrics/SUMMARY.md
+          
+          # Extract summary stats
+          TOTAL_FILES=$(cat metrics/code-metrics.json | jq '.[] | select(.Name=="Go") | .Count')
+          TOTAL_LINES=$(cat metrics/code-metrics.json | jq '.[] | select(.Name=="Go") | .Lines')
+          TOTAL_CODE=$(cat metrics/code-metrics.json | jq '.[] | select(.Name=="Go") | .Code')
+          TOTAL_COMMENTS=$(cat metrics/code-metrics.json | jq '.[] | select(.Name=="Go") | .Comment')
+          COMMENT_PERCENT=$(echo "scale=2; $TOTAL_COMMENTS * 100 / $TOTAL_LINES" | bc)
+          
+          echo "### Overall Stats" >> metrics/SUMMARY.md
+          echo "" >> metrics/SUMMARY.md
+          echo "- **Total Go Files:** $TOTAL_FILES" >> metrics/SUMMARY.md
+          echo "- **Total Lines:** $TOTAL_LINES" >> metrics/SUMMARY.md
+          echo "- **Lines of Code:** $TOTAL_CODE" >> metrics/SUMMARY.md
+          echo "- **Lines of Comments:** $TOTAL_COMMENTS ($COMMENT_PERCENT%)" >> metrics/SUMMARY.md
+          echo "" >> metrics/SUMMARY.md
+      
+      - name: Analyze module dependencies
+        run: |
+          echo "### Module Dependencies" >> metrics/SUMMARY.md
+          echo "" >> metrics/SUMMARY.md
+          
+          # List modules
+          MODULES=($(find . -name "go.mod" -exec dirname {} \; | sort))
+          
+          for mod_dir in "${MODULES[@]}"; do
+            echo "Analyzing $mod_dir"
+            cd "$mod_dir"
+            
+            MODULE_NAME=$(go list -m)
+            echo "#### $MODULE_NAME" >> ../../metrics/SUMMARY.md
+            echo "" >> ../../metrics/SUMMARY.md
+            
+            # Count exported vs non-exported identifiers
+            EXPORTED_COUNT=$(grep -r "^func [A-Z]" --include="*.go" . | wc -l)
+            NONEXPORTED_COUNT=$(grep -r "^func [a-z]" --include="*.go" . | wc -l)
+            
+            # Count interfaces
+            INTERFACE_COUNT=$(grep -r "^type [A-Z][a-zA-Z0-9]* interface" --include="*.go" . | wc -l)
+            
+            # Count structs
+            STRUCT_COUNT=$(grep -r "^type [A-Z][a-zA-Z0-9]* struct" --include="*.go" . | wc -l)
+            
+            echo "- **Exported Functions:** $EXPORTED_COUNT" >> ../../metrics/SUMMARY.md
+            echo "- **Non-exported Functions:** $NONEXPORTED_COUNT" >> ../../metrics/SUMMARY.md
+            echo "- **Interfaces:** $INTERFACE_COUNT" >> ../../metrics/SUMMARY.md
+            echo "- **Structs:** $STRUCT_COUNT" >> ../../metrics/SUMMARY.md
+            echo "" >> ../../metrics/SUMMARY.md
+            
+            # Generate dependency graph if not too large
+            FILE_COUNT=$(find . -name "*.go" | wc -l)
+            if [ $FILE_COUNT -lt 50 ]; then
+              echo "Generating dependency graph for $MODULE_NAME"
+              mkdir -p ../../metrics/graphs
+              godepgraph -novendor ./... | dot -Tsvg -o ../../metrics/graphs/$(basename "$mod_dir")-deps.svg
+              
+              echo "![Dependency Graph](../graphs/$(basename "$mod_dir")-deps.svg)" >> ../../metrics/SUMMARY.md
+              echo "" >> ../../metrics/SUMMARY.md
+            fi
+            
+            cd - > /dev/null
+          done
+      
+      - name: Analyze test coverage
+        run: |
+          echo "### Test Coverage" >> metrics/SUMMARY.md
+          echo "" >> metrics/SUMMARY.md
+          
+          # Run tests for each module
+          MODULES=($(find . -name "go.mod" -exec dirname {} \; | sort))
+          
+          for mod_dir in "${MODULES[@]}"; do
+            echo "Analyzing test coverage for $mod_dir"
+            cd "$mod_dir"
+            
+            MODULE_NAME=$(go list -m)
+            
+            # Run tests with coverage
+            go test -coverprofile=coverage.out ./...
+            
+            if [ -f coverage.out ]; then
+              # Get coverage percentage
+              COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}')
+              
+              echo "- **$MODULE_NAME:** $COVERAGE" >> ../../metrics/SUMMARY.md
+              
+              # Generate HTML coverage report
+              go tool cover -html=coverage.out -o ../../metrics/$(basename "$mod_dir")-coverage.html
+            else
+              echo "- **$MODULE_NAME:** No coverage data" >> ../../metrics/SUMMARY.md
+            fi
+            
+            cd - > /dev/null
+          done
+          
+          echo "" >> metrics/SUMMARY.md
+      
+      - name: Analyze commit history
+        run: |
+          echo "### Repository Activity" >> metrics/SUMMARY.md
+          echo "" >> metrics/SUMMARY.md
+          
+          # Get commit stats for last 365 days
+          echo "#### Commit Activity (Last 365 Days)" >> metrics/SUMMARY.md
+          echo "" >> metrics/SUMMARY.md
+          
+          # Total commits
+          TOTAL_COMMITS=$(git log --oneline --since="365 days ago" | wc -l)
+          echo "- **Total Commits:** $TOTAL_COMMITS" >> metrics/SUMMARY.md
+          
+          # Contributors
+          CONTRIBUTORS=$(git shortlog -sn --since="365 days ago" | wc -l)
+          echo "- **Contributors:** $CONTRIBUTORS" >> metrics/SUMMARY.md
+          
+          # Most active files
+          echo "" >> metrics/SUMMARY.md
+          echo "#### Most Active Files" >> metrics/SUMMARY.md
+          echo "" >> metrics/SUMMARY.md
+          git log --pretty=format: --name-only --since="365 days ago" | grep -v '^$' | sort | uniq -c | sort -rn | head -10 | awk '{print "- " $2 " (" $1 " changes)"}' >> metrics/SUMMARY.md
+          
+          echo "" >> metrics/SUMMARY.md
+      
+      - name: Upload metrics report
+        uses: actions/upload-artifact@v3
+        with:
+          name: code-metrics
+          path: metrics/
+      
+      - name: Create metrics PR
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "docs: update code metrics report"
+          title: "Update Code Metrics Report"
+          body: |
+            This PR updates the code metrics report.
+            
+            The report includes:
+            - Basic code stats (files, lines, comments)
+            - Module dependency analysis
+            - Test coverage information
+            - Repository activity metrics
+            
+            This PR was automatically generated by the metrics-report workflow.
+          branch: metrics-report-update
+          base: main
+          path: metrics/
+          labels: documentation,metrics

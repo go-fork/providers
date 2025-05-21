@@ -1,0 +1,74 @@
+name: Update README
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '!**/README.md'
+  workflow_dispatch:
+
+jobs:
+  update-readme:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.23.x'
+          cache: true
+
+      - name: Install graph tool
+        run: |
+          go install github.com/ofabry/go-callvis@latest
+
+      - name: Generate dependency graph
+        run: |
+          mkdir -p .github/assets
+          for dir in cache config http log middleware; do
+            if [ -d "$dir" ]; then
+              echo "Generating graph for $dir"
+              cd $dir
+              go-callvis -nostd -format=svg -file=../github/assets/$dir-deps.svg .
+              cd ..
+            fi
+          done
+
+      - name: Update README with new graphs
+        run: |
+          for dir in cache config http log middleware; do
+            if [ -d "$dir" ] && [ -f "$dir/README.md" ] && [ -f ".github/assets/$dir-deps.svg" ]; then
+              echo "Updating README for $dir"
+              # Replace or add dependency graph section
+              if grep -q "## Dependency Graph" "$dir/README.md"; then
+                # Replace existing section
+                sed -i '/## Dependency Graph/,/## /c\## Dependency Graph\n\n![Dependency Graph](..\/.github\/assets\/'"$dir"'-deps.svg)\n\n## ' "$dir/README.md"
+              else
+                # Add new section before the last heading
+                sed -i '$ a\\\n## Dependency Graph\n\n![Dependency Graph](..\/.github\/assets\/'"$dir"'-deps.svg)' "$dir/README.md"
+              fi
+            fi
+          done
+
+      - name: Commit and push changes
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          git add .github/assets/*.svg
+          git add */README.md
+          
+          # Only commit if there are changes
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          
+          git commit -m "docs: update dependency graphs in README files [skip ci]"
+          git push
