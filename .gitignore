@@ -1,0 +1,74 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+*.cover
+coverage.txt
+coverage.html
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+go.work.sum
+
+# macOS
+.DS_Store
+
+# IDE folders
+.idea/
+.vscode/
+*.swp
+*.swo
+coverage.*
+# Binary executables
+bin/
+dist/
+
+# Local environment variables
+.env
+.env.*
+!.env.example
+
+# Project specific files
+tmp/
+*.log
+
+# Generated files
+*_mock.go
+mock_*.go
+
+# Storage directories
+*/storage/logs/*
+*/storage/cache/*
+!*/storage/logs/.gitkeep
+!*/storage/cache/.gitkeep
+
+# Certificate files
+*.pem
+*.key
+*.crt
+*.csr
+*/storage/certs/*
+!*/storage/certs/.gitkeep
+
+# Temporary files for testing
+benchmark-results/
+metrics/
+integration-tests/
+
+# Release archives
+*.tar.gz
+*.zip
+
+# GoReleaser temp files
+dist/
