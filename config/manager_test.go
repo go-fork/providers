@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/go-fork/providers/config/formatter"
+	"github.com/go-fork/providers/config/utils"
 )
 
 // mockFormatter implements formatter.Formatter for testing
@@ -423,7 +423,7 @@ func TestManager_Unmarshal_Errors(t *testing.T) {
 
 func TestFlattenMapRecursive_AllBranches(t *testing.T) {
 	// nil result or nested
-	call := formatter.FlattenMapRecursiveForTest
+	call := utils.FlattenMapRecursive
 	call(nil, nil, "prefix")
 	call(map[string]interface{}{}, nil, "prefix")
 	call(nil, map[string]interface{}{}, "prefix")
@@ -461,4 +461,175 @@ func TestManager_Has_EmptyKey(t *testing.T) {
 	if mgr.Has("") {
 		t.Errorf("Has empty key should return false")
 	}
+}
+
+// TestDotNotation_Get kiểm tra chức năng Get với dot notation
+func TestDotNotation_Get(t *testing.T) {
+	mgr := NewManager()
+	mgr.Set("a.b.c", 1)
+	mgr.Set("a.b.d", 2)
+	mgr.Set("a.b.e.f", 3)
+	mgr.Set("a.b.e.g", 4)
+	mgr.Set("a.x", 5)
+
+	// Test Get trả về map gom các key con (map lồng)
+	val := mgr.Get("a.b")
+	m, ok := val.(map[string]interface{})
+	if !ok {
+		t.Fatalf("Get('a.b') không trả về map[string]interface{}")
+	}
+	if m["c"] != 1 || m["d"] != 2 {
+		t.Errorf("Get('a.b') sai giá trị: %#v", m)
+	}
+	e, ok := m["e"].(map[string]interface{})
+	if !ok || e["f"] != 3 || e["g"] != 4 {
+		t.Errorf("Get('a.b') lồng nhiều cấp sai: %#v", m)
+	}
+}
+
+// TestDotNotation_GetStringMap kiểm tra chức năng GetStringMap với dot notation
+func TestDotNotation_GetStringMap(t *testing.T) {
+	mgr := NewManager()
+	mgr.Set("a.b.c", 1)
+	mgr.Set("a.b.d", 2)
+	mgr.Set("a.b.e.f", 3)
+	mgr.Set("a.b.e.g", 4)
+
+	// Test GetStringMap gom đúng key con (map lồng)
+	m2 := mgr.GetStringMap("a.b")
+	if m2["c"] != 1 || m2["d"] != 2 {
+		t.Errorf("GetStringMap('a.b') sai giá trị: %#v", m2)
+	}
+	e2, ok := m2["e"].(map[string]interface{})
+	if !ok || e2["f"] != 3 || e2["g"] != 4 {
+		t.Errorf("GetStringMap('a.b') lồng nhiều cấp sai: %#v", m2)
+	}
+}
+
+// TestDotNotation_Has kiểm tra chức năng Has với dot notation
+func TestDotNotation_Has(t *testing.T) {
+	mgr := NewManager()
+	mgr.Set("a.b.c", 1)
+	mgr.Set("a.b.d", 2)
+	mgr.Set("a.b.e.f", 3)
+	mgr.Set("a.b.e.g", 4)
+
+	// Test Has cho key cha
+	if !mgr.Has("a.b") {
+		t.Error("Has('a.b') phải trả về true")
+	}
+	if !mgr.Has("a.b.e") {
+		t.Error("Has('a.b.e') phải trả về true")
+	}
+	if !mgr.Has("a.b.e.f") {
+		t.Error("Has('a.b.e.f') phải trả về true")
+	}
+	if mgr.Has("a.b.z") {
+		t.Error("Has('a.b.z') phải trả về false")
+	}
+}
+
+// TestDotNotation_Unmarshal kiểm tra chức năng Unmarshal với dot notation
+func TestDotNotation_Unmarshal(t *testing.T) {
+	mgr := NewManager()
+	// Test Unmarshal cho key lồng nhau
+	mgr.Set("x.b.c", 1)
+	mgr.Set("x.b.d", 2)
+	mgr.Set("x.b.e.f", 3)
+	mgr.Set("x.b.e.g", 4)
+	mgr.Set("x.b.f.f", 3)
+	mgr.Set("x.b.f.f2", 4)
+
+	// Test Unmarshal gom key con vào struct
+	type dotNotationStruct struct {
+		E map[string]interface{}
+		A map[string]interface{} `json:"f"`
+	}
+	var ts dotNotationStruct
+	err := mgr.Unmarshal("x.b", &ts)
+
+	// Check if there was no error during unmarshaling
+	if err != nil {
+		t.Errorf("Unmarshal('x.b') returned error: %v", err)
+	}
+	// Verify the E field contains the correct nested values
+	if ts.E == nil {
+		t.Error("Unmarshal('x.b') failed to populate the E field")
+	} else {
+		f, ok := ts.E["f"]
+		if !ok {
+			t.Error("Unmarshal('x.b') E.f key missing")
+		} else if f != float64(3) { // JSON unmarshaling converts numbers to float64
+			t.Errorf("Unmarshal('x.b') incorrect value for E.f: expected 3, got %v (type: %T)", f, f)
+		}
+
+		g, ok := ts.E["g"]
+		if !ok {
+			t.Error("Unmarshal('x.b') E.g key missing")
+		} else if g != float64(4) {
+			t.Errorf("Unmarshal('x.b') incorrect value for E.g: expected 4, got %v (type: %T)", g, g)
+		}
+	}
+
+	// Verify the A field (mapped to "f" in JSON) contains the correct nested values
+	if ts.A == nil {
+		t.Error("Unmarshal('x.b') failed to populate the A field (json:\"f\")")
+	} else {
+		f, ok := ts.A["f"]
+		if !ok {
+			t.Error("Unmarshal('x.b') A.f key missing")
+		} else if f != float64(3) {
+			t.Errorf("Unmarshal('x.b') incorrect value for A.f: expected 3, got %v (type: %T)", f, f)
+		}
+
+		f2, ok := ts.A["f2"]
+		if !ok {
+			t.Error("Unmarshal('x.b') A.f2 key missing")
+		} else if f2 != float64(4) {
+			t.Errorf("Unmarshal('x.b') incorrect value for A.f2: expected 4, got %v (type: %T)", f2, f2)
+		}
+	}
+}
+
+// TestManagerGetStringSlice_StringerInInterface kiểm tra GetStringSlice với Stringer trong slice
+func TestManagerGetStringSlice_StringerInInterface(t *testing.T) {
+	mgr := NewManager()
+	// Tạo slice chứa một đối tượng Stringer
+	slice := []interface{}{
+		"normal string",
+		myStringer{}, // Sử dụng myStringer implement fmt.Stringer
+		42,
+	}
+	mgr.Set("stringer_slice", slice)
+
+	result := mgr.GetStringSlice("stringer_slice")
+	expected := []string{"normal string", "stringer", "42"}
+
+	if len(result) != len(expected) {
+		t.Errorf("GetStringSlice with Stringer: wrong length, got %v, want %v", len(result), len(expected))
+	}
+
+	for i, v := range expected {
+		if result[i] != v {
+			t.Errorf("GetStringSlice with Stringer: index %d wrong value, got %v, want %v", i, result[i], v)
+		}
+	}
+}
+
+// TestManagerGetStringSlice_JSONUnmarshalToInterface kiểm tra GetStringSlice với JSON unmarshal vào []interface{}
+func TestManagerGetStringSlice_JSONUnmarshalToInterface(t *testing.T) {
+	mgr := NewManager()
+
+	// Test với JSON mà chứa số và string (sẽ unmarshal thành []interface{} chứ không phải []string)
+	jsonData := `[1, 2.5, "text"]`
+	mgr.Set("mixed_json", jsonData)
+
+	result := mgr.GetStringSlice("mixed_json")
+
+	// Kiểm tra kết quả - có thể trả về chuỗi JSON hoặc kết quả parse
+	if len(result) == 0 {
+		t.Error("GetStringSlice with JSON string should return non-empty result")
+	}
+
+	t.Logf("GetStringSlice result for JSON data: %v", result)
 }

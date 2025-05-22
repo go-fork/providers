@@ -1,3 +1,4 @@
+// Package config cung cấp giải pháp quản lý cấu hình linh hoạt và mở rộng cho ứng dụng Go.
 package config
 
 import (
@@ -10,20 +11,52 @@ import (
 
 // ServiceProvider cung cấp cấu hình cho module config và tích hợp với DI container.
 //
-// ServiceProvider đăng ký config manager vào container, tự động nạp cấu hình từ biến môi trường và thư mục configs.
+// ServiceProvider là một implementation của interface di.ServiceProvider, cho phép tự động
+// đăng ký config manager vào DI container của ứng dụng. ServiceProvider thực hiện các công việc:
+//   - Tạo một config manager mới
+//   - Nạp cấu hình từ biến môi trường với prefix "APP"
+//   - Nạp cấu hình từ thư mục configs của ứng dụng (các file YAML)
+//   - Đăng ký config manager vào DI container với key "config"
+//
+// Để sử dụng ServiceProvider, ứng dụng cần:
+//   - Implement interface Container() *di.Container để cung cấp DI container
+//   - Implement interface BasePath(path ...string) string để cung cấp đường dẫn đến thư mục configs
 type ServiceProvider struct{}
 
 // NewServiceProvider trả về một ServiceProvider mới cho module config.
 //
 // Hàm này khởi tạo và trả về một đối tượng ServiceProvider để sử dụng với DI container.
+// ServiceProvider cho phép tự động đăng ký và cấu hình config manager cho ứng dụng.
+//
+// Returns:
+//   - di.ServiceProvider: Interface di.ServiceProvider đã được implement bởi ServiceProvider
+//
+// Example:
+//
+//	app.Register(config.NewServiceProvider())
 func NewServiceProvider() di.ServiceProvider {
 	return &ServiceProvider{}
 }
 
 // Register đăng ký các binding cấu hình vào DI container.
 //
-// Tham số app phải implement interface có Container() *di.Container và BasePath().
-// Hàm này sẽ tạo config manager, nạp cấu hình từ biến môi trường và thư mục configs, sau đó đăng ký vào container.
+// Register được gọi khi đăng ký ServiceProvider vào ứng dụng. Phương thức này
+// tạo một config manager mới, nạp cấu hình từ các nguồn khác nhau,
+// và đăng ký manager này vào DI container của ứng dụng.
+//
+// Params:
+//   - app: interface{} - Đối tượng ứng dụng phải implement các interface:
+//   - Container() *di.Container - Trả về DI container
+//   - BasePath(path ...string) string - Trả về đường dẫn gốc của ứng dụng
+//
+// Luồng thực thi:
+//  1. Kiểm tra app có implement Container() không, nếu không thì return
+//  2. Lấy container từ app, kiểm tra nếu nil thì return
+//  3. Tạo config manager mới
+//  4. Nếu app implement BasePath():
+//     a. Nạp cấu hình từ biến môi trường với prefix "APP"
+//     b. Nạp cấu hình từ thư mục configs của ứng dụng
+//  5. Đăng ký config manager vào container với key "config"
 func (p *ServiceProvider) Register(app interface{}) {
 	// Lấy container từ app nếu có
 	appWithContainer, ok := app.(interface{ Container() *di.Container })
@@ -72,7 +105,12 @@ func (p *ServiceProvider) Register(app interface{}) {
 
 // Boot được gọi sau khi tất cả các service provider đã được đăng ký.
 //
-// Hàm này là một lifecycle hook, mặc định không thực hiện gì.
+// Boot là một lifecycle hook của di.ServiceProvider mà thực hiện sau khi tất cả
+// các service provider đã được đăng ký xong. Trong trường hợp của ConfigServiceProvider,
+// không cần thực hiện thêm hành động nào ở giai đoạn boot.
+//
+// Params:
+//   - app: interface{} - Đối tượng ứng dụng, không sử dụng trong phương thức này
 func (p *ServiceProvider) Boot(app interface{}) {
 	// Không cần thực hiện gì trong Boot
 }

@@ -85,3 +85,27 @@ func TestServiceProvider_Boot_Coverage(t *testing.T) {
 	// Boot với app bất kỳ
 	sp.Boot(struct{}{})
 }
+
+func TestServiceProvider_Register_EdgeCases(t *testing.T) {
+	sp := NewServiceProvider()
+
+	// Test với app không implement Container()
+	sp.Register(struct{}{})
+
+	// Test với app có Container() nhưng trả về nil
+	appWithNilContainer := &struct {
+		container *di.Container
+	}{}
+	sp.Register(appWithNilContainer)
+
+	// Test với app có BasePath nhưng trả về empty string
+	c := di.New()
+	app := &mockApp{container: c, basePath: ""}
+	sp.Register(app)
+
+	// Kiểm tra container vẫn có manager được đăng ký
+	cfg, err := c.Make("config")
+	if err != nil || cfg == nil {
+		t.Errorf("config manager not registered in container, err=%v", err)
+	}
+}
