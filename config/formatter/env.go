@@ -124,10 +124,7 @@ func (p *EnvFormatter) Load() (map[string]interface{}, error) {
 		}
 
 		// Loại bỏ prefix và dấu gạch dưới đầu tiên sau prefix (nếu có)
-		key = key[prefixLen:]
-		if strings.HasPrefix(key, "_") {
-			key = key[1:]
-		}
+		key = strings.TrimPrefix(key[prefixLen:], "_")
 
 		// Chuyển key sang lowercase và thay _ thành . để hỗ trợ dot notation
 		key = strings.ToLower(key)
