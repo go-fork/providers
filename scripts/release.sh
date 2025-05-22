@@ -3,6 +3,10 @@
 
 set -e
 
+# Source the changelog functions
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+source "$SCRIPT_DIR/changelog_functions.sh"
+
 # Display help message
 function show_help {
   echo "Usage: ./release.sh [options]"
@@ -12,12 +16,23 @@ function show_help {
   echo "  -v, --version VERSION Specify the version to release (e.g., v0.1.0)"
   echo "  -a, --all VERSION     Release all modules with the same version"
   echo "  -r, --repo VERSION    Release the entire repository with given version"
+  echo "  -c, --create-release  Create GitHub release in addition to tags"
+  # Add a new parameter --push-only to allow pushing tags without creating them
+  echo "  -f, --force           Skip checking for uncommitted changes"
+  echo "  -o, --overwrite       Overwrite existing tags if they already exist" 
+  echo "  -p, --push-only       Only push existing tags, don't create new ones"
+  echo "  -g, --generate-changelog Generate changelog from commit messages"
   echo "  -h, --help            Display this help message"
   echo ""
   echo "Examples:"
   echo "  ./release.sh --module cache --version v0.1.0  # Release cache module v0.1.0"
   echo "  ./release.sh --all v0.1.0                     # Release all modules with v0.1.0"
   echo "  ./release.sh --repo v0.1.0                    # Release the entire repository as v0.1.0"
+  echo "  ./release.sh --module cache --version v0.1.0 --create-release  # Also create GitHub release"
+  echo "  ./release.sh --repo v0.1.0 --force            # Skip checking for uncommitted changes"
+  echo "  ./release.sh --module config --version v0.1.0 --overwrite  # Overwrite existing tag"
+  echo "  ./release.sh --module config --version v0.1.0 --push-only  # Push existing tag only"
+  echo "  ./release.sh --module config --version v0.1.0 --generate-changelog  # Auto-generate changelog"
 }
 
 # Ensure we're at the repo root
@@ -45,6 +60,26 @@ while (( "$#" )); do
       RELEASE_REPO=true
       VERSION="$2"
       shift 2
+      ;;
+    -c|--create-release)
+      CREATE_RELEASE=true
+      shift
+      ;;
+    -f|--force)
+      FORCE_RELEASE=true
+      shift
+      ;;
+    -o|--overwrite)
+      OVERWRITE_TAG=true
+      shift
+      ;;
+    -p|--push-only)
+      PUSH_ONLY=true
+      shift
+      ;;
+    -g|--generate-changelog)
+      GENERATE_CHANGELOG=true
+      shift
       ;;
     -h|--help)
       show_help
@@ -104,10 +139,119 @@ fi
 # Get all modules
 MODULES=$(find . -name "go.mod" -not -path "*/vendor/*" -not -path "*/.git/*" | xargs dirname | sed 's/^\.\///' | sort)
 
+# Function to create GitHub release for a module
+function create_github_release_for_module {
+  local module=$1
+  local version=$2
+  local tag_name=$3
+  
+  # Generate release notes file if CHANGELOG exists
+  local release_notes=""
+  if [[ -n "$RELEASE_NOTES_FILE" && -f "$RELEASE_NOTES_FILE" ]]; then
+    # Use already generated changelog
+    release_notes="$RELEASE_NOTES_FILE"
+  elif [[ -f "$module/CHANGELOG.md" ]]; then
+    release_notes=$(mktemp)
+    # Extract the latest release notes from CHANGELOG
+    awk -v ver="$version" 'BEGIN{p=0} $0 ~ "^## " ver {p=1} $0 ~ "^## " && $0 !~ ver && p==1 {p=0} p==1 {print}' "$module/CHANGELOG.md" > "$release_notes"
+  fi
+  
+  create_github_release "$tag_name" "Release $module $version" "$release_notes"
+  
+  # Clean up temporary file
+  if [[ -n "$release_notes" && -f "$release_notes" ]]; then
+    rm "$release_notes"
+  fi
+}
+
+# Function to create GitHub release for repository
+function create_github_release_for_repo {
+  local version=$1
+  
+  # Generate release notes file if CHANGELOG exists
+  local release_notes=""
+  if [[ -n "$RELEASE_NOTES_FILE" && -f "$RELEASE_NOTES_FILE" ]]; then
+    # Use already generated changelog
+    release_notes="$RELEASE_NOTES_FILE"
+  elif [[ -f "CHANGELOG.md" ]]; then
+    release_notes=$(mktemp)
+    # Extract the latest release notes from CHANGELOG
+    awk -v ver="$version" 'BEGIN{p=0} $0 ~ "^## " ver {p=1} $0 ~ "^## " && $0 !~ ver && p==1 {p=0} p==1 {print}' "CHANGELOG.md" > "$release_notes"
+  fi
+  
+  create_github_release "$version" "Release $version" "$release_notes"
+  
+  # Clean up temporary file
+  if [[ -n "$release_notes" && -f "$release_notes" ]]; then
+    rm "$release_notes"
+  fi
+}
+
+# Function to create a GitHub release
+function create_github_release {
+  local tag=$1
+  local title=$2
+  local release_notes=$3
+  
+  echo "Creating GitHub release for tag: $tag"
+  
+  # Check if gh CLI is installed
+  if ! command -v gh &> /dev/null; then
+    echo "Warning: GitHub CLI (gh) is not installed. Cannot create GitHub release."
+    echo "To install GitHub CLI, visit: https://cli.github.com/"
+    echo "Skipping GitHub release creation..."
+    return 1
+  fi
+  
+  # Check if authenticated with GitHub
+  if ! gh auth status &> /dev/null; then
+    echo "Warning: Not authenticated with GitHub CLI. Cannot create GitHub release."
+    echo "Please run 'gh auth login' to authenticate."
+    echo "Skipping GitHub release creation..."
+    return 1
+  fi
+  
+  # Create GitHub release
+  if [ -n "$release_notes" ] && [ -f "$release_notes" ]; then
+    gh release create "$tag" --title "$title" --notes-file "$release_notes"
+  else
+    gh release create "$tag" --title "$title" --notes "Release $tag"
+  fi
+  
+  if [ $? -eq 0 ]; then
+    echo "GitHub release created successfully"
+  else
+    echo "Failed to create GitHub release"
+    return 1
+  fi
+  
+  return 0
+}
+
 # Function to release a single module
 function release_module {
   local module=$1
   local version=$2
+  
+  local tag_name="${module}-${version}"
+  
+  # If push-only, just push the tag and exit
+  if [[ "$PUSH_ONLY" == true ]]; then
+    if git tag | grep -q "^$tag_name$"; then
+      echo "Pushing existing tag $tag_name to remote"
+      git push origin "$tag_name"
+      
+      # Create GitHub release if requested
+      if [[ "$CREATE_RELEASE" == true ]]; then
+        create_github_release_for_module "$module" "$version" "$tag_name"
+      fi
+      
+      return 0
+    else
+      echo "Error: Tag $tag_name does not exist locally. Cannot push." >&2
+      exit 1
+    fi
+  fi
   
   echo "Preparing release for module: $module, version: $version"
   
@@ -118,79 +262,186 @@ function release_module {
   fi
   
   # Check for uncommitted changes
-  if [[ -n "$(git status --porcelain "$module")" ]]; then
+  if [[ "$FORCE_RELEASE" != true && -n "$(git status --porcelain "$module")" ]]; then
     echo "Error: Module $module has uncommitted changes" >&2
-    echo "Please commit or stash changes before releasing" >&2
+    echo "Please commit or stash changes before releasing, or use --force to skip this check" >&2
     exit 1
   fi
   
   # Update CHANGELOG.md if it exists
-  if [[ -f "$module/CHANGELOG.md" ]]; then
+  if [[ -f "$module/CHANGELOG.md" || "$GENERATE_CHANGELOG" == true ]]; then
     echo "Updating $module/CHANGELOG.md"
     
-    # Get current date
-    CURRENT_DATE=$(date +"%Y-%m-%d")
-    
-    # Create changelog entry
-    CHANGELOG_ENTRY="## $version - $CURRENT_DATE\n\n* See GitHub release notes\n\n"
-    
-    # Add entry to the top of the changelog (after the header)
-    sed -i '' -e "4i\\
+    if [[ "$GENERATE_CHANGELOG" == true ]]; then
+      # Generate changelog from commit messages
+      local generated_changelog=$(generate_changelog "$module" "$tag_name")
+      
+      # Update changelog file with generated content
+      update_changelog_file "$module" "$version" "$generated_changelog"
+      
+      # Save generated changelog for release description
+      RELEASE_NOTES_FILE="$generated_changelog"
+    else
+      # Traditional changelog update
+      # Get current date
+      CURRENT_DATE=$(date +"%Y-%m-%d")
+      
+      # Create changelog entry
+      CHANGELOG_ENTRY="## $version - $CURRENT_DATE\n\n* See GitHub release notes\n\n"
+      
+      # Add entry to the top of the changelog (after the header)
+      sed -i '' -e "4i\\
 $CHANGELOG_ENTRY
 " "$module/CHANGELOG.md"
-    
-    # Commit changelog update
-    git add "$module/CHANGELOG.md"
-    git commit -m "docs($module): update CHANGELOG for $version"
+      
+      # Commit changelog update
+      git add "$module/CHANGELOG.md"
+      git commit -m "docs($module): update CHANGELOG for $version"
+    fi
   fi
   
-  # Create tag for module
-  echo "Creating tag: $module/$version"
-  git tag -a "$module/$version" -m "Release $module $version"
+  # Create tag for module (using a hyphen separator instead of slash)
+  local tag_name="${module}-${version}"
+  
+  # Check if tag exists and handle it
+  if git tag | grep -q "^$tag_name$"; then
+    if [[ "$OVERWRITE_TAG" == true ]]; then
+      echo "Tag $tag_name already exists, removing it (--overwrite specified)"
+      git tag -d "$tag_name"
+      
+      # Check if tag exists in remote
+      if git ls-remote --tags origin | grep -q "refs/tags/$tag_name$"; then
+        echo "Removing tag from remote as well"
+        git push origin ":refs/tags/$tag_name" || {
+          echo "Warning: Failed to delete remote tag. You may need to delete it manually."
+        }
+      fi
+    else
+      echo "Error: Tag $tag_name already exists. Use --overwrite to replace it." >&2
+      exit 1
+    fi
+  fi
+  
+  echo "Creating tag: $tag_name"
+  git tag -a "$tag_name" -m "Release $module $version"
   
   echo "Module $module $version prepared for release"
-  echo "To push this release, run: git push origin $module/$version"
+  
+  # Automatically push tag to remote if creating a GitHub release
+  if [[ "$CREATE_RELEASE" == true ]]; then
+    echo "Pushing tag to remote repository (required for GitHub release)"
+    git push origin "$tag_name"
+  else
+    echo "To push this release, run: git push origin $tag_name"
+  fi
+  
+  # Create GitHub release if requested
+  if [[ "$CREATE_RELEASE" == true ]]; then
+    create_github_release_for_module "$module" "$version" "$tag_name"
+  fi
 }
 
 # Function to release the entire repository
 function release_repo {
   local version=$1
   
+  # If push-only, just push the tag and exit
+  if [[ "$PUSH_ONLY" == true ]]; then
+    if git tag | grep -q "^$version$"; then
+      echo "Pushing existing tag $version to remote"
+      git push origin "$version"
+      
+      # Create GitHub release if requested
+      if [[ "$CREATE_RELEASE" == true ]]; then
+        create_github_release_for_repo "$version"
+      fi
+      
+      return 0
+    else
+      echo "Error: Tag $version does not exist locally. Cannot push." >&2
+      exit 1
+    fi
+  fi
+  
   echo "Preparing release for entire repository, version: $version"
   
   # Check for uncommitted changes
-  if [[ -n "$(git status --porcelain)" ]]; then
+  if [[ "$FORCE_RELEASE" != true && -n "$(git status --porcelain)" ]]; then
     echo "Error: Repository has uncommitted changes" >&2
-    echo "Please commit or stash changes before releasing" >&2
+    echo "Please commit or stash changes before releasing, or use --force to skip this check" >&2
     exit 1
   fi
   
   # Update root CHANGELOG.md if it exists
-  if [[ -f "CHANGELOG.md" ]]; then
+  if [[ -f "CHANGELOG.md" || "$GENERATE_CHANGELOG" == true ]]; then
     echo "Updating CHANGELOG.md"
     
-    # Get current date
-    CURRENT_DATE=$(date +"%Y-%m-%d")
-    
-    # Create changelog entry
-    CHANGELOG_ENTRY="## $version - $CURRENT_DATE\n\n* See GitHub release notes\n\n"
-    
-    # Add entry to the top of the changelog (after the header)
-    sed -i '' -e "4i\\
+    if [[ "$GENERATE_CHANGELOG" == true ]]; then
+      # Generate changelog from commit messages
+      local generated_changelog=$(generate_changelog "." "$version")
+      
+      # Update changelog file with generated content
+      update_changelog_file "." "$version" "$generated_changelog"
+      
+      # Save generated changelog for release description
+      RELEASE_NOTES_FILE="$generated_changelog"
+    else
+      # Traditional changelog update
+      # Get current date
+      CURRENT_DATE=$(date +"%Y-%m-%d")
+      
+      # Create changelog entry
+      CHANGELOG_ENTRY="## $version - $CURRENT_DATE\n\n* See GitHub release notes\n\n"
+      
+      # Add entry to the top of the changelog (after the header)
+      sed -i '' -e "4i\\
 $CHANGELOG_ENTRY
 " "CHANGELOG.md"
-    
-    # Commit changelog update
-    git add "CHANGELOG.md"
-    git commit -m "docs: update CHANGELOG for $version"
+      
+      # Commit changelog update
+      git add "CHANGELOG.md"
+      git commit -m "docs: update CHANGELOG for $version"
+    fi
   fi
   
   # Create tag for repository
   echo "Creating tag: $version"
+  
+  # Check if tag exists and handle it
+  if git tag | grep -q "^$version$"; then
+    if [[ "$OVERWRITE_TAG" == true ]]; then
+      echo "Tag $version already exists, removing it (--overwrite specified)"
+      git tag -d "$version"
+      
+      # Check if tag exists in remote
+      if git ls-remote --tags origin | grep -q "refs/tags/$version$"; then
+        echo "Removing tag from remote as well"
+        git push origin ":refs/tags/$version" || {
+          echo "Warning: Failed to delete remote tag. You may need to delete it manually."
+        }
+      fi
+    else
+      echo "Error: Tag $version already exists. Use --overwrite to replace it." >&2
+      exit 1
+    fi
+  fi
+  
   git tag -a "$version" -m "Release $version"
   
   echo "Repository $version prepared for release"
-  echo "To push this release, run: git push origin $version"
+  
+  # Automatically push tag to remote if creating a GitHub release
+  if [[ "$CREATE_RELEASE" == true ]]; then
+    echo "Pushing tag to remote repository (required for GitHub release)"
+    git push origin "$version"
+  else
+    echo "To push this release, run: git push origin $version"
+  fi
+  
+  # Create GitHub release if requested
+  if [[ "$CREATE_RELEASE" == true ]]; then
+    create_github_release_for_repo "$version"
+  fi
 }
 
 # Execute the requested action
@@ -201,6 +452,15 @@ if [[ "$RELEASE_ALL" == true ]]; then
   done
   echo "All modules prepared for release with version $VERSION"
   echo "To push all releases, run: git push origin --tags"
+  
+  # Create GitHub releases if requested
+  if [[ "$CREATE_RELEASE" == true ]]; then
+    echo "Creating GitHub releases for all modules..."
+    for module in $MODULES; do
+      local tag_name="${module}-${VERSION}"
+      create_github_release_for_module "$module" "$VERSION" "$tag_name"
+    done
+  fi
 elif [[ "$RELEASE_REPO" == true ]]; then
   release_repo "$VERSION"
 else
