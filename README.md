@@ -4,7 +4,7 @@
 [![GoDoc](https://godoc.org/github.com/go-fork/providers?status.svg)](https://godoc.org/github.com/go-fork/providers)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A collection of modular Go service providers for the [PAMM Framework](https://github.com/go-fork/pamm). Each provider is a standalone module that can be used independently or in combination with other providers.
+A collection of modular Go service providers for the [Fork Framework](https://github.com/go-fork). Each provider is a standalone module that can be used independently or in combination with other providers.
 
 ## Available Providers
 
@@ -147,5 +147,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Acknowledgments
 
-- Inspired by Laravel's Service Provider pattern
-- Built for the [PAMM Framework](https://github.com/go-fork/pamm)
+- Inspired by Service Provider pattern
+- Built for the [Fork Framework](https://github.com/go-fork)
