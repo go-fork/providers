@@ -5,6 +5,32 @@
 // các file tương ứng (yaml.go, json.go, env.go).
 package formatter
 
+import (
+	"github.com/go-fork/providers/config/model"
+)
+
+// FlattenOptions định nghĩa các tùy chọn cho quá trình flatten cấu trúc dữ liệu phân cấp.
+type FlattenOptions struct {
+	// Separator là ký tự phân tách được sử dụng trong dot notation (mặc định là ".")
+	Separator string
+	// SkipNil quyết định có bỏ qua các giá trị nil hay không
+	SkipNil bool
+	// HandleEmptyKey quyết định có xử lý key rỗng hay không
+	HandleEmptyKey bool
+	// CaseSensitive quyết định có phân biệt hoa thường trong key hay không
+	CaseSensitive bool
+}
+
+// DefaultFlattenOptions trả về các tùy chọn mặc định cho quá trình flatten.
+func DefaultFlattenOptions() FlattenOptions {
+	return FlattenOptions{
+		Separator:      ".",
+		SkipNil:        true,
+		HandleEmptyKey: false,
+		CaseSensitive:  false,
+	}
+}
+
 // Formatter định nghĩa interface cho các nguồn cấu hình (configuration source).
 //
 // Interface này cho phép trừu tượng hóa việc nạp dữ liệu cấu hình từ nhiều nguồn khác nhau
@@ -13,33 +39,7 @@ package formatter
 //
 // Các implementation phải đảm bảo trả về map với key dạng dot notation cho dữ liệu phân cấp.
 type Formatter interface {
-	// Load tải dữ liệu cấu hình từ nguồn.
-	//
-	// Phương thức này đọc và phân tích dữ liệu cấu hình từ nguồn cụ thể (file, env, ...)
-	// và trả về kết quả dưới dạng map[string]interface{} với key dạng dot notation.
-	//
-	// Returns:
-	//   - map[string]interface{}: Map chứa các cặp key-value cấu hình.
-	//   - error: Lỗi nếu không thể nạp hoặc phân tích dữ liệu.
-	//
-	// Examples:
-	//   values, err := formatter.Load()
-	//   if err == nil {
-	//     for k, v := range values {
-	//       manager.Set(k, v)
-	//     }
-	//   }
-	Load() (map[string]interface{}, error)
-
-	// Name trả về tên định danh của Formatter.
-	//
-	// Phương thức này trả về một chuỗi mô tả nguồn cấu hình,
-	// thường bao gồm loại formatter và nguồn dữ liệu cụ thể.
-	//
-	// Returns:
-	//   - string: Tên định danh của Formatter (ví dụ: "yaml:config.yaml", "env:APP_").
-	//
-	// Examples:
-	//   name := formatter.Name() // Ví dụ: "yaml:config.yaml"
-	Name() string
+	Load() (interface{}, error)                                             // Tải dữ liệu
+	Parse(data interface{}) (interface{}, error)                            // Phân tích cú pháp
+	Flatten(data interface{}, opts FlattenOptions) (model.ConfigMap, error) // Flatten recursive
 }

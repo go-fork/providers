@@ -5,154 +5,143 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
+	"reflect"
+	"strconv"
+	"strings"
 
-	"github.com/go-fork/providers/config/utils"
+	"github.com/go-fork/providers/config/model"
 )
 
-// JsonFormatter là một Formatter cho phép nạp cấu hình từ file JSON.
-//
-// JsonFormatter đọc dữ liệu từ file JSON, phân tích cú pháp (parse) thành cấu trúc dữ liệu map,
-// và chuyển đổi các key phân cấp thành dạng dot notation. Ví dụ, một cấu trúc JSON như:
-//
-//	{
-//	  "database": {
-//	    "host": "localhost",
-//	    "port": 3306
-//	  }
-//	}
-//
-// sẽ được chuyển đổi thành map với các key: "database.host": "localhost" và "database.port": 3306.
-//
-// JsonFormatter hỗ trợ tất cả các kiểu dữ liệu JSON hợp lệ: objects, arrays, strings,
-// numbers, booleans và null values. Kiểu dữ liệu này phù hợp cho cấu hình ứng dụng với
-// các cấu trúc dữ liệu phức tạp và hỗ trợ tốt cho dữ liệu số.
-type JsonFormatter struct {
-	path string // Đường dẫn đến file JSON chứa dữ liệu cấu hình
+// JSONFormatter đọc cấu hình từ file JSON.
+type JSONFormatter struct {
+	// path là đường dẫn tới file JSON
+	path string
+	// opts là các tùy chọn cho quá trình flatten
+	opts FlattenOptions
 }
 
-// NewJsonFormatter khởi tạo và trả về một JsonFormatter mới.
-//
-// Hàm này tạo một instance mới của JsonFormatter với đường dẫn file JSON được chỉ định.
-// Đường dẫn có thể là tương đối hoặc tuyệt đối. File sẽ được kiểm tra tồn tại và
-// khả năng đọc khi phương thức Load được gọi.
-//
-// Params:
-//   - path: string - Đường dẫn đến file JSON cần nạp cấu hình.
-//
-// Returns:
-//   - *JsonFormatter: Con trỏ đến đối tượng JsonFormatter mới được khởi tạo.
-//
-// Examples:
-//
-//	formatter := NewJsonFormatter("config/app.json")
-//	config, err := formatter.Load()
-func NewJsonFormatter(path string) *JsonFormatter {
-	return &JsonFormatter{
+// NewJSONFormatter tạo một JSONFormatter mới.
+func NewJSONFormatter(path string) *JSONFormatter {
+	return &JSONFormatter{
 		path: path,
+		opts: DefaultFlattenOptions(),
 	}
 }
 
-// Load nạp và chuyển đổi cấu hình từ file JSON thành map các giá trị.
-//
-// Phương thức này thực hiện các bước xử lý sau:
-//  1. Kiểm tra tính hợp lệ của đường dẫn file
-//  2. Đọc nội dung của file JSON vào bộ nhớ
-//  3. Parse nội dung JSON thành cấu trúc dữ liệu Go
-//  4. Làm phẳng cấu trúc phân cấp thành map với key dạng dot notation
-//
-// Phương thức này có các xử lý đặc biệt cho các trường hợp:
-//   - File JSON rỗng hoặc chỉ chứa object rỗng ({}) -> trả về map rỗng
-//   - JSON không phải là object (như array hoặc giá trị nguyên thủy) -> trả về map rỗng
-//
-// Quá trình làm phẳng sẽ chuyển đổi cấu trúc lồng nhau thành các key phẳng.
-// Ví dụ, cấu trúc JSON như sau:
-//
-//	{
-//	  "app": {
-//	    "name": "MyApp",
-//	    "version": 1.2,
-//	    "features": ["auth", "api"]
-//	  }
-//	}
-//
-// sẽ được chuyển đổi thành:
-//
-//	"app.name": "MyApp"
-//	"app.version": 1.2
-//	"app.features": ["auth", "api"]
-//
-// Params: Không yêu cầu tham số đầu vào.
-//
-// Returns:
-//   - map[string]interface{}: Map chứa các cặp key-value đã được làm phẳng từ file JSON.
-//   - error: Lỗi nếu xảy ra vấn đề trong quá trình đọc hoặc parse file.
-//
-// Exceptions:
-//   - "empty file path": Đường dẫn file rỗng
-//   - "config file not found: [path]": File JSON không tồn tại tại đường dẫn đã chỉ định
-//   - "failed to read config file: [error]": Không thể đọc nội dung file (lỗi quyền truy cập, v.v.)
-//   - "failed to parse JSON config at [path]: [error]": Nội dung file không phải định dạng JSON hợp lệ
-func (p *JsonFormatter) Load() (map[string]interface{}, error) {
-	// Kiểm tra đường dẫn file không rỗng
-	if p.path == "" {
-		return nil, fmt.Errorf("empty file path")
-	}
-
-	// Đọc nội dung file vào bộ nhớ
-	data, err := os.ReadFile(p.path)
-	if err != nil {
-		// Xử lý trường hợp file không tồn tại
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("config file not found: %s", p.path)
-		}
-		// Xử lý các lỗi đọc file khác
-		return nil, fmt.Errorf("failed to read config file: %v", err)
-	}
-
-	// Xử lý trường hợp file rỗng hoặc chỉ chứa object rỗng
-	if len(data) == 0 || (len(data) == 2 && string(data) == "{}") {
-		return make(map[string]interface{}), nil
-	}
-
-	// Parse dữ liệu JSON thành map[string]interface{}
-	var result map[string]interface{}
-	err = json.Unmarshal(data, &result)
-	if err != nil {
-		// Nếu không phải là object JSON, thử parse thành kiểu dữ liệu bất kỳ
-		// (có thể là array, string, number, boolean, hoặc null)
-		var anyValue interface{}
-		if errAny := json.Unmarshal(data, &anyValue); errAny == nil {
-			// Trường hợp JSON hợp lệ nhưng không phải là object -> trả về map rỗng
-			return make(map[string]interface{}), nil
-		}
-		// Trường hợp JSON không hợp lệ -> trả về lỗi
-		return nil, fmt.Errorf("failed to parse JSON config at %s: %v", p.path, err)
-	}
-
-	// Chuyển đổi cấu trúc phân cấp thành map phẳng với key dạng dot notation
-	flattenMap := make(map[string]interface{})
-	utils.FlattenMapRecursive(flattenMap, result, "")
-	return flattenMap, nil
+// WithOptions cấu hình các tùy chọn cho JSONFormatter.
+func (f *JSONFormatter) WithOptions(opts FlattenOptions) *JSONFormatter {
+	f.opts = opts
+	return f
 }
 
-// Name trả về tên định danh của formatter cho mục đích ghi log và debug.
-//
-// Phương thức này tạo một tên định danh duy nhất cho formatter, bao gồm loại formatter
-// và tên file cấu hình. Tên này được sử dụng bởi Manager để xác định nguồn cấu hình
-// trong quá trình gỡ lỗi, ghi log, và theo dõi quá trình nạp cấu hình.
-//
-// Format của tên trả về là "json:<tên-file>", trong đó <tên-file> là tên file
-// (không bao gồm đường dẫn thư mục) được cung cấp khi khởi tạo formatter.
-//
-// Params: Không yêu cầu tham số đầu vào.
-//
-// Returns:
-//   - string: Tên định danh của formatter theo format "json:<tên-file>".
-//
-// Examples:
-//   - Nếu path = "/etc/app/config.json" thì Name() trả về "json:config.json"
-//   - Nếu path = "./settings.json" thì Name() trả về "json:settings.json"
-func (p *JsonFormatter) Name() string {
-	return "json:" + filepath.Base(p.path)
+// Load đọc nội dung từ file JSON.
+func (f *JSONFormatter) Load() (interface{}, error) {
+	data, err := os.ReadFile(f.path)
+	if err != nil {
+		return nil, fmt.Errorf("cannot read JSON file %s: %w", f.path, err)
+	}
+	return data, nil
+}
+
+// Parse chuyển đổi nội dung JSON thành cấu trúc dữ liệu Go.
+func (f *JSONFormatter) Parse(data interface{}) (interface{}, error) {
+	jsonData, ok := data.([]byte)
+	if !ok {
+		return nil, fmt.Errorf("expected []byte but got %T", data)
+	}
+
+	var result interface{}
+	if err := json.Unmarshal(jsonData, &result); err != nil {
+		return nil, fmt.Errorf("cannot parse JSON: %w", err)
+	}
+
+	return result, nil
+}
+
+// Flatten chuyển đổi cấu trúc dữ liệu lồng nhau thành ConfigMap phẳng với dot notation.
+func (f *JSONFormatter) Flatten(data interface{}, opts FlattenOptions) (model.ConfigMap, error) {
+	result := model.ConfigMap{}
+	if data == nil {
+		return result, nil
+	}
+
+	err := f.flattenRecursive(data, "", result, opts)
+	return result, err
+}
+
+// flattenRecursive đệ quy qua cấu trúc dữ liệu lồng nhau để tạo ConfigMap phẳng.
+func (f *JSONFormatter) flattenRecursive(data interface{}, prefix string, result model.ConfigMap, opts FlattenOptions) error {
+	if data == nil {
+		if !opts.SkipNil {
+			result[prefix] = model.ConfigValue{Value: nil, Type: model.TypeNil}
+		}
+		return nil
+	}
+
+	rv := reflect.ValueOf(data)
+
+	switch rv.Kind() {
+	case reflect.Map:
+		// Lưu giá trị gốc nếu có prefix
+		if prefix != "" {
+			result[prefix] = model.ConfigValue{Value: data, Type: model.TypeMap}
+		}
+
+		for _, key := range rv.MapKeys() {
+			strKey := fmt.Sprintf("%v", key.Interface())
+			if !opts.CaseSensitive {
+				strKey = strings.ToLower(strKey)
+			}
+
+			newPrefix := strKey
+			if prefix != "" {
+				newPrefix = prefix + opts.Separator + strKey
+			}
+
+			err := f.flattenRecursive(rv.MapIndex(key).Interface(), newPrefix, result, opts)
+			if err != nil {
+				return err
+			}
+		}
+
+	case reflect.Slice, reflect.Array:
+		// Lưu giá trị gốc
+		if prefix != "" {
+			result[prefix] = model.ConfigValue{Value: data, Type: model.TypeSlice}
+		}
+
+		length := rv.Len()
+		for i := 0; i < length; i++ {
+			newPrefix := prefix + opts.Separator + strconv.Itoa(i)
+			if prefix == "" {
+				newPrefix = strconv.Itoa(i)
+			}
+
+			err := f.flattenRecursive(rv.Index(i).Interface(), newPrefix, result, opts)
+			if err != nil {
+				return err
+			}
+		}
+
+	case reflect.Bool:
+		result[prefix] = model.ConfigValue{Value: rv.Bool(), Type: model.TypeBool}
+
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		result[prefix] = model.ConfigValue{Value: rv.Int(), Type: model.TypeInt}
+
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		result[prefix] = model.ConfigValue{Value: rv.Uint(), Type: model.TypeInt}
+
+	case reflect.Float32, reflect.Float64:
+		result[prefix] = model.ConfigValue{Value: rv.Float(), Type: model.TypeFloat}
+
+	case reflect.String:
+		result[prefix] = model.ConfigValue{Value: rv.String(), Type: model.TypeString}
+
+	default:
+		// Kiểu khác thì xử lý như string
+		result[prefix] = model.ConfigValue{Value: fmt.Sprintf("%v", data), Type: model.TypeString}
+	}
+
+	return nil
 }

@@ -2,9 +2,6 @@
 package config
 
 import (
-	"fmt"
-	"os"
-
 	"github.com/go-fork/di"
 	"github.com/go-fork/providers/config/formatter"
 )
@@ -49,6 +46,11 @@ func NewServiceProvider() di.ServiceProvider {
 //   - Container() *di.Container - Trả về DI container
 //   - BasePath(path ...string) string - Trả về đường dẫn gốc của ứng dụng
 //
+// Các formatters được đăng ký theo thứ tự ưu tiên từ cao xuống thấp:
+//  1. EnvFormatter: Đọc biến môi trường với prefix "APP_"
+//  2. JSONFormatter: Đọc file JSON từ thư mục configs
+//  3. YAMLFormatter: Đọc file YAML từ thư mục configs
+//
 // Luồng thực thi:
 //  1. Kiểm tra app có implement Container() không, nếu không thì return
 //  2. Lấy container từ app, kiểm tra nếu nil thì return
@@ -69,33 +71,30 @@ func (p *ServiceProvider) Register(app interface{}) {
 		return // Không xử lý nếu container nil
 	}
 
-	// Tạo config manager
-	manager := NewManager()
+	manager := NewConfig()
 
-	// Nạp cấu hình từ env và thư mục configs nếu app hỗ trợ BasePath
-	if appWithPath, ok := app.(interface{ BasePath(path ...string) string }); ok {
-		// Nạp từ biến môi trường
-		envProvider := formatter.NewEnvFormatter("APP")
-		_ = manager.Load(envProvider) // Bỏ qua lỗi khi nạp từ env
+	// Kiểm tra app có implement BasePath không
+	appWithBasePath, ok := app.(interface{ BasePath(path ...string) string })
+	if ok {
+		// Nạp cấu hình từ biến môi trường với prefix "APP_"
+		envFormatter := formatter.NewEnvFormatter("APP_")
+		if err := manager.Load(envFormatter); err != nil {
+			// Tiếp tục ngay cả khi có lỗi từ env formatter
+		}
 
-		// Nạp từ file YAML trong thư mục configs
-		configPath := appWithPath.BasePath("configs")
-		if configPath != "" {
-			// Kiểm tra thư mục configs tồn tại
-			if fileInfo, err := os.Stat(configPath); err == nil && fileInfo.IsDir() {
-				// Phải cẩn thận xử lý lỗi từ LoadFromDirectory vì nó bây giờ trả về lỗi cho file YAML không hợp lệ
-				values, err := formatter.LoadFromDirectory(configPath)
-				if err == nil {
-					for k, v := range values {
-						if k != "" {
-							manager.Set(k, v)
-						}
-					}
-				} else {
-					// Ghi log lỗi nhưng không dừng quá trình đăng ký
-					fmt.Printf("Warning: Failed to load config from directory %s: %v\n", configPath, err)
-				}
-			}
+		// Lấy đường dẫn tới thư mục configs
+		configPath := appWithBasePath.BasePath("configs")
+
+		// Nạp cấu hình từ file YAML (ưu tiên thấp nhất)
+		yamlFormatter := formatter.NewYAMLFormatter(configPath + "/config.yaml")
+		if err := manager.Load(yamlFormatter); err != nil {
+			// Tiếp tục ngay cả khi có lỗi từ yaml formatter
+		}
+
+		// Nạp cấu hình từ file JSON (ưu tiên cao hơn YAML)
+		jsonFormatter := formatter.NewJSONFormatter(configPath + "/config.json")
+		if err := manager.Load(jsonFormatter); err != nil {
+			// Tiếp tục ngay cả khi có lỗi từ json formatter
 		}
 	}
 
