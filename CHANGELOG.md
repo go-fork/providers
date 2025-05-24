@@ -1,5 +1,31 @@
 # Changelog
 
+## [Unreleased]
+
+### Đã thêm
+- **mailer**: Cập nhật từ `github.com/go-gomail/gomail` sang `gopkg.in/gomail.v2` với API tương thích
+- **scheduler**: Thêm mới Provider Scheduler để quản lý các tác vụ định kỳ
+- **scheduler**: Nâng cao chức năng scheduler với validation và các phương thức fluent interface
+- **queue**: Hoàn thiện chức năng worker với tích hợp scheduler
+- **tests**: Thêm MockManager cho unit testing cấu hình
+- **tests**: Nâng cao queue tests với các kịch bản và xử lý lỗi bổ sung
+
+### Đã thay đổi
+- **dependencies**: Nâng cấp di v0.0.2 lên v0.0.3
+- **dependencies**: Nâng cấp fsnotify v1.8.0 lên v1.9.0
+- **dependencies**: Nâng cấp các thư viện phụ thuộc, bao gồm:
+  - golang.org/x/sys v0.29.0 -> v0.33.0
+  - golang.org/x/text v0.21.0 -> v0.25.0
+  - github.com/pelletier/go-toml/v2 v2.2.3 -> v2.2.4
+  - github.com/sagikazarmark/locafero v0.7.0 -> v0.9.0
+  - github.com/spf13/afero v1.12.0 -> v1.14.0
+  - github.com/spf13/cast v1.7.1 -> v1.8.0
+  - go.uber.org/multierr v1.9.0 -> v1.11.0
+  - go.uber.org/atomic v1.9.0 -> v1.11.0
+
+### Đã xóa
+- **sms**: Xóa module go.mod cho SMS, chuẩn bị cho việc cải tiến module này
+
 ## v0.0.2 (2025-05-22)
 
 ### Cache Package

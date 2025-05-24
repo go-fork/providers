@@ -1,6 +1,6 @@
 # Mailer Provider
 
-Mailer Provider là giải pháp gửi email đơn giản và mạnh mẽ cho ứng dụng Go, được xây dựng dựa trên thư viện [go-gomail/gomail](https://github.com/go-gomail/gomail).
+Mailer Provider là giải pháp gửi email đơn giản và mạnh mẽ cho ứng dụng Go, được xây dựng dựa trên thư viện [gopkg.in/gomail.v2](https://gopkg.in/gomail.v2).
 
 ## Tính năng nổi bật
 

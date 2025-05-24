@@ -3,7 +3,7 @@
 //
 // Package này cung cấp APIs để gửi email với nội dung văn bản thuần túy
 // hoặc HTML, hỗ trợ render template, đính kèm file, nhúng hình ảnh và
-// xử lý email qua hàng đợi. Nó được xây dựng dựa trên thư viện go-gomail/gomail
+// xử lý email qua hàng đợi. Nó được xây dựng dựa trên thư viện gopkg.in/gomail.v2
 // và cung cấp một interface đơn giản, mạnh mẽ và linh hoạt.
 //
 // Ví dụ sử dụng cơ bản:

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-gomail/gomail"
+	"gopkg.in/gomail.v2"
 )
 
 func TestNewSMTPMailer(t *testing.T) {

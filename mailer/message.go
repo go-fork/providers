@@ -10,7 +10,7 @@ import (
 
 	texttemplate "text/template"
 
-	"github.com/go-gomail/gomail"
+	"gopkg.in/gomail.v2"
 )
 
 // Message đại diện cho một email với đầy đủ thông tin

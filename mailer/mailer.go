@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/go-gomail/gomail"
+	"gopkg.in/gomail.v2"
 )
 
 // Mailer interface định nghĩa các phương thức để gửi email
