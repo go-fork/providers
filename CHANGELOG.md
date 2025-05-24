@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [v0.0.3] - 2025-05-25
+
 ### Đã thêm
 - **mailer**: Cập nhật từ `github.com/go-gomail/gomail` sang `gopkg.in/gomail.v2` với API tương thích
 - **scheduler**: Thêm mới Provider Scheduler để quản lý các tác vụ định kỳ
