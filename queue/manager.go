@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/go-fork/providers/queue/adapter"
+	"github.com/go-fork/providers/scheduler"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -26,6 +27,12 @@ type Manager interface {
 
 	// Server trả về Server.
 	Server() Server
+
+	// Scheduler trả về Scheduler manager để lên lịch tasks.
+	Scheduler() scheduler.Manager
+
+	// SetScheduler thiết lập scheduler manager từ bên ngoài.
+	SetScheduler(scheduler scheduler.Manager)
 }
 
 // manager quản lý các thành phần trong queue.
@@ -33,6 +40,7 @@ type manager struct {
 	config      Config
 	client      Client
 	server      Server
+	scheduler   scheduler.Manager
 	redisClient redis.UniversalClient
 	memoryQueue adapter.QueueAdapter
 	redisQueue  adapter.QueueAdapter
@@ -143,4 +151,18 @@ func (m *manager) Server() Server {
 		}
 	}
 	return m.server
+}
+
+// Scheduler trả về Scheduler manager để lên lịch tasks.
+func (m *manager) Scheduler() scheduler.Manager {
+	if m.scheduler == nil {
+		// Tạo scheduler mới nếu chưa có
+		m.scheduler = scheduler.NewScheduler()
+	}
+	return m.scheduler
+}
+
+// SetScheduler thiết lập scheduler manager từ bên ngoài.
+func (m *manager) SetScheduler(sched scheduler.Manager) {
+	m.scheduler = sched
 }
