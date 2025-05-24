@@ -1,9 +1,6 @@
 # Changelog
 
 ## v0.0.2 (2025-05-22)
-## v0.0.2 - 2025-05-22nn* See GitHub release notesnn
-## v0.0.2 - 2025-05-22nn* See GitHub release notesnn
-## v0.0.2 - 2025-05-22nn* See GitHub release notesnn
 
 ### Cache Package
 

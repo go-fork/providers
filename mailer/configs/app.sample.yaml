@@ -1,0 +1,50 @@
+# Mailer Provider Configuration Sample
+# This file provides a template for configuring the mailer provider
+
+# Mailer Configuration
+mailer:
+  smtp:
+    # SMTP Server settings
+    host: "smtp.example.com"
+    port: 587
+    
+    # Authentication
+    username: "your-email@example.com"
+    password: "your-password"
+    
+    # Encryption: "tls", "ssl", or "none"
+    encryption: "tls"
+    
+    # Default sender information
+    from_address: "no-reply@example.com"
+    from_name: "System Notification"
+    
+    # Connection timeout in seconds
+    timeout: 10
+  # Optional: Queue configuration for asynchronous email sending
+  queue:
+    # Whether to use queue for email sending
+    enabled: false
+    
+    # Queue adapter to use: "memory" or "redis"
+    # - "memory" is suitable for development and testing
+    # - "redis" is recommended for production
+    adapter: "redis"
+
+    # Queue name for email tasks
+    name: "mailer"
+    
+    # Timeout in seconds for processing a single email
+    delay_timeout: 60
+    
+    # Whether to stop processing if an error occurs
+    fail_fast: false
+    
+    # Whether to record delivery status in a separate queue
+    track_status: true
+
+      # Maximum retry attempts for failed email sending
+    max_retries: 3
+    
+    # Retry delay in seconds
+    retry_delay: 60

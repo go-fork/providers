@@ -408,7 +408,7 @@ func TestManager_SetConfigName(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// Create test config file
-	configPath := tmpDir + "/json"
+	configPath := tmpDir + "/config.json"
 	err = os.WriteFile(configPath, []byte(`{"test": "value"}`), 0644)
 	require.NoError(t, err)
 
