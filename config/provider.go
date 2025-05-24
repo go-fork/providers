@@ -76,5 +76,8 @@ func (p *ServiceProvider) Register(app interface{}) {
 // Params:
 //   - app: interface{} - Đối tượng ứng dụng, không sử dụng trong phương thức này
 func (p *ServiceProvider) Boot(app interface{}) {
-	// Không cần thực hiện gì trong Boot
+	// Safety check, though method is a no-op
+	if app == nil {
+		return
+	}
 }

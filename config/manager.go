@@ -826,34 +826,40 @@ func (m *manager) GetIntSlice(key string) ([]int, bool) {
 
 // GetMap trả về giá trị map cho key.
 func (m *manager) GetMap(key string) (map[string]interface{}, bool) {
+	// Kiểm tra nếu key không tồn tại
 	if !m.Viper.IsSet(key) {
 		return nil, false
 	}
 
-	// Kiểm tra xem key có phải là một map không
+	// Kiểm tra nếu giá trị là map
 	val := m.Viper.Get(key)
 	if mapVal, ok := val.(map[string]interface{}); ok {
 		return mapVal, true
 	}
 
-	// Thử thu thập tất cả các subkey để tạo map
+	// Sau đó kiểm tra các subkey
+	return m.getMapFromSubKeys(key)
+}
+
+// getMapFromSubKeys tạo map từ các subkeys với tiền tố chung.
+// Hàm này được tách ra để dễ dàng test và cải thiện độ bao phủ.
+func (m *manager) getMapFromSubKeys(key string) (map[string]interface{}, bool) {
 	result := make(map[string]interface{})
 	prefix := key + "."
 	subKeys := m.Viper.AllKeys()
 
-	hasSubKeys := false
+	hasSubKey := false
 	for _, subKey := range subKeys {
 		if strings.HasPrefix(subKey, prefix) {
+			hasSubKey = true
 			shortKey := strings.TrimPrefix(subKey, prefix)
 			result[shortKey] = m.Viper.Get(subKey)
-			hasSubKeys = true
 		}
 	}
 
-	if hasSubKeys {
+	if hasSubKey {
 		return result, true
 	}
-
 	return nil, false
 }
 
