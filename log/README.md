@@ -15,6 +15,7 @@ Logging là một phần thiết yếu trong phát triển và vận hành ứng
 - **Xử lý file linh hoạt**: Tự động xoay vòng file log khi đạt kích thước giới hạn.
 - **Tích hợp DI**: Dễ dàng tích hợp với Dependency Injection container.
 - **Cấu trúc mở rộng**: Dễ dàng triển khai handler mới cho các output khác.
+- **Truy xuất handler linh hoạt**: Lấy handler đã đăng ký để cấu hình hoặc tùy chỉnh thêm.
 
 ## Cấu trúc package
 
@@ -132,6 +133,29 @@ stackHandler.PushHandler(fileHandler)
 manager.AddHandler("combined", stackHandler)
 ```
 
+### Truy xuất và tùy chỉnh Handler
+
+Bạn có thể truy xuất các handler đã đăng ký để thực hiện cấu hình bổ sung hoặc kiểm tra trạng thái:
+
+```go
+// Thêm handler vào manager
+consoleHandler := handler.NewConsoleHandler(true)
+manager.AddHandler("console", consoleHandler)
+
+// Sau đó, truy xuất handler để cấu hình thêm
+if handlerObj := manager.GetHandler("console"); handlerObj != nil {
+    // Chuyển đổi kiểu để truy cập các phương thức đặc thù cho console handler
+    if typedHandler, ok := handlerObj.(*handler.ConsoleHandler); ok {
+        // Thực hiện cấu hình bổ sung...
+    }
+}
+
+// Kiểm tra handler có tồn tại không trước khi xóa
+if manager.GetHandler("old-handler") != nil {
+    manager.RemoveHandler("old-handler")
+}
+```
+
 ### Lọc theo cấp độ
 
 Mỗi handler có thể được cấu hình để chỉ xử lý các log từ cấp độ nghiêm trọng nhất định trở lên:
@@ -180,6 +204,20 @@ func (h *MyCustomHandler) SetMinLevel(level handler.Level) {
 func (h *MyCustomHandler) Close() error {
     // Dọn dẹp tài nguyên nếu cần
     return nil
+}
+```
+
+### Lấy Handler Đã Đăng Ký
+
+Để lấy handler đã đăng ký và thực hiện cấu hình hoặc tùy chỉnh thêm:
+
+```go
+// Giả sử bạn đã đăng ký một handler với tên "file"
+fileHandler := manager.GetHandler("file")
+
+// Thực hiện cấu hình cho handler
+if fileHandler != nil {
+    fileHandler.SetMinLevel(handler.ErrorLevel)
 }
 ```
 

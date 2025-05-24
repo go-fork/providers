@@ -44,13 +44,13 @@ func TestNewManager(t *testing.T) {
 	}
 
 	// Kiểm tra kiểu đúng
-	_, ok := m.(*DefaultManager)
+	_, ok := m.(*manager)
 	if !ok {
-		t.Errorf("NewManager() không trả về *DefaultManager, got %T", m)
+		t.Errorf("NewManager() không trả về *manager, got %T", m)
 	}
 
 	// Kiểm tra các thuộc tính mặc định
-	defaultManager := m.(*DefaultManager)
+	defaultManager := m.(*manager)
 	if defaultManager.minLevel != handler.InfoLevel {
 		t.Errorf("Manager mới không đặt minLevel mặc định là InfoLevel, got %v", defaultManager.minLevel)
 	}
@@ -59,8 +59,8 @@ func TestNewManager(t *testing.T) {
 	}
 }
 
-func TestDefaultManagerAddHandler(t *testing.T) {
-	m := NewManager().(*DefaultManager)
+func TestManagerAddHandler(t *testing.T) {
+	m := NewManager().(*manager)
 	h := &MockHandler{}
 
 	// Test thêm handler
@@ -98,7 +98,7 @@ func TestDefaultManagerAddHandler(t *testing.T) {
 	}
 }
 
-func TestDefaultManagerRemoveHandler(t *testing.T) {
+func TestManagerRemoveHandler(t *testing.T) {
 	m := NewManager()
 	h := &MockHandler{}
 
@@ -114,7 +114,7 @@ func TestDefaultManagerRemoveHandler(t *testing.T) {
 	}
 
 	// Kiểm tra handler đã bị xóa khỏi map
-	defaultManager := m.(*DefaultManager)
+	defaultManager := m.(*manager)
 	if _, ok := defaultManager.handlers["test"]; ok {
 		t.Error("RemoveHandler không xóa handler khỏi map")
 	}
@@ -136,7 +136,7 @@ func TestDefaultManagerRemoveHandler(t *testing.T) {
 }
 
 func TestSetMinLevel(t *testing.T) {
-	m := NewManager().(*DefaultManager)
+	m := NewManager().(*manager)
 
 	// Kiểm tra mức mặc định
 	if m.minLevel != handler.InfoLevel {
@@ -214,7 +214,7 @@ func TestLogMethods(t *testing.T) {
 	}
 }
 
-func TestDefaultManagerClose(t *testing.T) {
+func TestManagerClose(t *testing.T) {
 	m := NewManager()
 	h1 := &MockHandler{}
 	h2 := &MockHandler{}
@@ -238,13 +238,13 @@ func TestDefaultManagerClose(t *testing.T) {
 
 	// Lưu ý: Theo hiện thực hiện tại, Close() không xóa các handlers khỏi map
 	// Nó chỉ đóng các handlers nhưng vẫn giữ chúng trong map
-	defaultManager := m.(*DefaultManager)
+	defaultManager := m.(*manager)
 	if len(defaultManager.handlers) == 0 {
 		t.Error("Không mong đợi map handlers trống sau khi close, hiện thực chỉ đóng handlers")
 	}
 }
 
-func TestDefaultManagerCloseWithError(t *testing.T) {
+func TestManagerCloseWithError(t *testing.T) {
 	m := NewManager()
 	h1 := &MockHandler{}
 	h2 := &MockHandler{ShouldError: true}
@@ -348,7 +348,55 @@ func TestLogWithFormatting(t *testing.T) {
 	}
 }
 
-// TestLogWithErrorHandler kiểm tra xử lý lỗi từ handler
+func TestManagerGetHandler(t *testing.T) {
+	m := NewManager()
+	h1 := &MockHandler{}
+	h2 := &MockHandler{}
+
+	// Thêm các handlers
+	m.AddHandler("handler1", h1)
+	m.AddHandler("handler2", h2)
+
+	// Lấy handler đã đăng ký
+	handlerResult := m.GetHandler("handler1")
+	if handlerResult == nil {
+		t.Error("GetHandler trả về nil cho handler đã đăng ký")
+	}
+
+	if handlerResult != h1 {
+		t.Errorf("GetHandler không trả về đúng handler, got %v, want %v", handlerResult, h1)
+	}
+
+	// Lấy handler thứ hai
+	handlerResult = m.GetHandler("handler2")
+	if handlerResult != h2 {
+		t.Errorf("GetHandler không trả về đúng handler cho key thứ hai, got %v, want %v", handlerResult, h2)
+	}
+
+	// Lấy handler không tồn tại
+	handlerResult = m.GetHandler("nonexistent")
+	if handlerResult != nil {
+		t.Errorf("GetHandler không trả về nil cho handler không tồn tại, got %v", handlerResult)
+	}
+
+	// Kiểm tra thread-safety (thông qua kiểm tra chức năng cơ bản)
+	// Thêm handler mới trong khi đang thực hiện GetHandler
+	go func() {
+		m.AddHandler("handler3", &MockHandler{})
+	}()
+
+	// Xóa handler trong khi đang thực hiện GetHandler
+	go func() {
+		m.RemoveHandler("handler1")
+	}()
+
+	// Lấy handler2 một lần nữa sau các thao tác đồng thời
+	handlerResult = m.GetHandler("handler2")
+	if handlerResult != h2 {
+		t.Errorf("GetHandler không hoạt động đúng sau các thao tác đồng thời, got %v, want %v", handlerResult, h2)
+	}
+}
+
 func TestLogWithErrorHandler(t *testing.T) {
 	m := NewManager()
 	h := &MockHandler{ShouldError: true}

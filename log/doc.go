@@ -51,6 +51,16 @@
 // interface handler.Handler, cho phép các hành vi logging cụ thể như
 // network logging, lưu trữ database, hoặc tích hợp với hệ thống monitoring bên ngoài.
 //
+// Truy xuất handler đã đăng ký để cấu hình hoặc kiểm tra:
+//
+//	// Lấy handler theo tên để cấu hình
+//	if consoleHandler := manager.GetHandler("console"); consoleHandler != nil {
+//	    // Cấu hình thêm cho handler
+//	    if typedHandler, ok := consoleHandler.(*handler.ConsoleHandler); ok {
+//	        // Thực hiện cấu hình đặc thù cho ConsoleHandler
+//	    }
+//	}
+//
 // # Xem thêm
 //
 // Interface Manager và triển khai DefaultManager cho các thao tác logging chính.

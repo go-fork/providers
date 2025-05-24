@@ -76,19 +76,18 @@ func TestServiceProviderRegister(t *testing.T) {
 	}
 
 	// Kiểm tra handlers được thiết lập
-	// Vì GetHandler là một phương thức mở rộng, chúng ta cần type assertion trước
-	if defaultManager, ok := manager.(*DefaultManager); ok {
-		if consoleHandler, exists := defaultManager.GetHandler("console"); !exists {
-			t.Error("Manager không có console handler")
-		} else {
-			// Kiểm tra đúng kiểu handler
-			_, ok := consoleHandler.(*handler.ConsoleHandler)
-			if !ok {
-				t.Errorf("Console handler không đúng kiểu, got %T", consoleHandler)
-			}
-		}
+	// manager đã là kiểu Manager, không cần type assertion lại
+
+	// Kiểm tra console handler
+	consoleHandler := manager.GetHandler("console")
+	if consoleHandler == nil {
+		t.Error("Manager không có console handler")
 	} else {
-		t.Error("Manager không phải kiểu DefaultManager")
+		// Kiểm tra đúng kiểu handler
+		_, ok := consoleHandler.(*handler.ConsoleHandler)
+		if !ok {
+			t.Errorf("Console handler không đúng kiểu, got %T", consoleHandler)
+		}
 	}
 
 	// Kiểm tra thư mục logs tồn tại
@@ -101,15 +100,14 @@ func TestServiceProviderRegister(t *testing.T) {
 	}
 
 	// Kiểm tra file handler
-	if defaultManager, ok := manager.(*DefaultManager); ok {
-		if fileHandler, exists := defaultManager.GetHandler("file"); !exists {
-			t.Error("Manager không có file handler")
-		} else {
-			// Kiểm tra đúng kiểu handler
-			_, ok := fileHandler.(*handler.FileHandler)
-			if !ok {
-				t.Errorf("File handler không đúng kiểu, got %T", fileHandler)
-			}
+	fileHandler := manager.GetHandler("file")
+	if fileHandler == nil {
+		t.Error("Manager không có file handler")
+	} else {
+		// Kiểm tra đúng kiểu handler
+		_, ok := fileHandler.(*handler.FileHandler)
+		if !ok {
+			t.Errorf("File handler không đúng kiểu, got %T", fileHandler)
 		}
 	}
 }
@@ -282,15 +280,6 @@ func TestContainerResolveDependencies(t *testing.T) {
 	if result != nil {
 		t.Errorf("container.Call trả về không mong đợi: %v", result)
 	}
-}
-
-// TestGetHandler kiểm tra xem Manager có phương thức GetHandler không
-func (m *DefaultManager) GetHandler(name string) (handler.Handler, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	h, exists := m.handlers[name]
-	return h, exists
 }
 
 // TestBindingTypes kiểm tra các loại binding khác nhau trong container
@@ -593,15 +582,15 @@ func TestLoggerConfiguration(t *testing.T) {
 	}
 
 	// Kiểm tra logManager
-	defaultManager, ok := logManager.(*DefaultManager)
+	defaultManager, ok := logManager.(Manager)
 	if !ok {
-		t.Fatalf("LogManager không phải DefaultManager, got %T", logManager)
+		t.Fatalf("LogManager không phải kiểu Manager, got %T", logManager)
 	}
 
 	// Kiểm tra cấu hình mặc định
 	// Vì handlers là private, cần sử dụng GetHandler
-	consoleHandler, exists := defaultManager.GetHandler("console")
-	if !exists {
+	consoleHandler := defaultManager.GetHandler("console")
+	if consoleHandler == nil {
 		t.Error("ConsoleHandler không tồn tại")
 	} else {
 		// Kiểm tra kiểu handler
@@ -611,8 +600,8 @@ func TestLoggerConfiguration(t *testing.T) {
 	}
 
 	// Kiểm tra file handler và đường dẫn
-	fileHandler, exists := defaultManager.GetHandler("file")
-	if !exists {
+	fileHandler := defaultManager.GetHandler("file")
+	if fileHandler == nil {
 		t.Error("FileHandler không tồn tại")
 	} else {
 		// Kiểm tra kiểu handler
@@ -719,13 +708,13 @@ func TestServiceProviderErrorHandling(t *testing.T) {
 	}
 
 	// Kiểm tra kiểu
-	defaultManager, ok := manager.(*DefaultManager)
+	defaultManager, ok := manager.(Manager)
 	if !ok {
-		t.Fatalf("Binding 'log' không phải DefaultManager, nhận được kiểu %T", manager)
+		t.Fatalf("Binding 'log' không phải kiểu Manager, nhận được kiểu %T", manager)
 	}
 
 	// Vẫn nên có console handler
-	if _, exists := defaultManager.GetHandler("console"); !exists {
+	if defaultManager.GetHandler("console") == nil {
 		t.Error("ConsoleHandler không tồn tại khi Register với đường dẫn không hợp lệ")
 	}
 }

@@ -63,6 +63,15 @@ type Manager interface {
 	//   - name: string - định danh của handler cần xóa
 	RemoveHandler(name string)
 
+	// GetHandler trả về một handler đã đăng ký theo tên.
+	//
+	// Tham số:
+	//   - name: string - định danh của handler cần lấy
+	//
+	// Trả về:
+	//   - handler.Handler - instance của handler hoặc nil nếu không tìm thấy
+	GetHandler(name string) handler.Handler
+
 	// SetMinLevel thiết lập ngưỡng cấp độ log tối thiểu.
 	//
 	// Tham số:
@@ -76,9 +85,9 @@ type Manager interface {
 	Close() error
 }
 
-// DefaultManager là triển khai chuẩn của interface Manager.
+// manager là triển khai chuẩn của interface Manager.
 //
-// DefaultManager cung cấp cách quản lý nhiều handler log với bộ lọc
+// manager cung cấp cách quản lý nhiều handler log với bộ lọc
 // dựa trên cấp độ thread-safe. Nó được thiết kế cho truy cập đồng thời
 // trong môi trường đa goroutine.
 //
@@ -87,7 +96,7 @@ type Manager interface {
 //   - Lọc cấp độ log
 //   - Thêm/xóa handler động
 //   - Dọn dẹp tài nguyên an toàn khi tắt
-type DefaultManager struct {
+type manager struct {
 	handlers map[string]handler.Handler // Map các handler theo tên
 	minLevel handler.Level              // Ngưỡng cấp độ log tối thiểu
 	mu       sync.RWMutex               // Mutex để đảm bảo thread-safety
@@ -106,7 +115,7 @@ type DefaultManager struct {
 //	manager := log.NewManager()
 //	manager.AddHandler("console", handler.NewConsoleHandler(true))
 func NewManager() Manager {
-	return &DefaultManager{
+	return &manager{
 		handlers: make(map[string]handler.Handler),
 		minLevel: handler.InfoLevel, // Mặc định là InfoLevel
 	}
@@ -124,7 +133,7 @@ func NewManager() Manager {
 // Ví dụ:
 //
 //	manager.Debug("Lần thử kết nối %d đến %s", attempt, serverAddress)
-func (m *DefaultManager) Debug(message string, args ...interface{}) {
+func (m *manager) Debug(message string, args ...interface{}) {
 	// Ghi log ở cấp độ DebugLevel
 	m.log(handler.DebugLevel, message, args...)
 }
@@ -141,7 +150,7 @@ func (m *DefaultManager) Debug(message string, args ...interface{}) {
 // Ví dụ:
 //
 //	manager.Info("Máy chủ đã khởi động trên cổng %d", port)
-func (m *DefaultManager) Info(message string, args ...interface{}) {
+func (m *manager) Info(message string, args ...interface{}) {
 	// Ghi log ở cấp độ InfoLevel
 	m.log(handler.InfoLevel, message, args...)
 }
@@ -158,7 +167,7 @@ func (m *DefaultManager) Info(message string, args ...interface{}) {
 // Ví dụ:
 //
 //	manager.Warning("Sử dụng bộ nhớ cao: %d MB", memoryUsage)
-func (m *DefaultManager) Warning(message string, args ...interface{}) {
+func (m *manager) Warning(message string, args ...interface{}) {
 	// Ghi log ở cấp độ WarningLevel
 	m.log(handler.WarningLevel, message, args...)
 }
@@ -175,7 +184,7 @@ func (m *DefaultManager) Warning(message string, args ...interface{}) {
 // Ví dụ:
 //
 //	manager.Error("Xử lý yêu cầu thất bại: %v", err)
-func (m *DefaultManager) Error(message string, args ...interface{}) {
+func (m *manager) Error(message string, args ...interface{}) {
 	// Ghi log ở cấp độ ErrorLevel
 	m.log(handler.ErrorLevel, message, args...)
 }
@@ -192,7 +201,7 @@ func (m *DefaultManager) Error(message string, args ...interface{}) {
 // Ví dụ:
 //
 //	manager.Fatal("Kết nối database thất bại: %v", err)
-func (m *DefaultManager) Fatal(message string, args ...interface{}) {
+func (m *manager) Fatal(message string, args ...interface{}) {
 	// Ghi log ở cấp độ FatalLevel
 	m.log(handler.FatalLevel, message, args...)
 }
@@ -211,7 +220,7 @@ func (m *DefaultManager) Fatal(message string, args ...interface{}) {
 //	// Thêm một file handler
 //	fileHandler, _ := handler.NewFileHandler("app.log", 10*1024*1024)
 //	manager.AddHandler("file", fileHandler)
-func (m *DefaultManager) AddHandler(name string, handler handler.Handler) {
+func (m *manager) AddHandler(name string, handler handler.Handler) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	// Thêm hoặc thay thế handler theo tên
@@ -231,7 +240,7 @@ func (m *DefaultManager) AddHandler(name string, handler handler.Handler) {
 // Ví dụ:
 //
 //	manager.RemoveHandler("file") // Xóa và đóng handler "file"
-func (m *DefaultManager) RemoveHandler(name string) {
+func (m *manager) RemoveHandler(name string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	// Đóng và xóa handler nếu nó tồn tại
@@ -239,6 +248,30 @@ func (m *DefaultManager) RemoveHandler(name string) {
 		handler.Close()
 		delete(m.handlers, name)
 	}
+}
+
+// GetHandler trả về một handler đã đăng ký theo tên.
+//
+// Method này trả về một handler theo tên đã cho hoặc nil nếu không tìm thấy.
+// Method này là thread-safe.
+//
+// Tham số:
+//   - name: string - tên của handler cần lấy
+//
+// Trả về:
+//   - handler.Handler: instance của handler hoặc nil nếu không tìm thấy
+//
+// Ví dụ:
+//
+//	if h := manager.GetHandler("file"); h != nil {
+//	    // Sử dụng handler
+//	}
+func (m *manager) GetHandler(name string) handler.Handler {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	// Trả về handler nếu tồn tại hoặc nil nếu không tìm thấy
+	return m.handlers[name]
 }
 
 // SetMinLevel thiết lập cấp độ log tối thiểu cho manager.
@@ -253,7 +286,7 @@ func (m *DefaultManager) RemoveHandler(name string) {
 //
 //	// Chỉ xử lý log Warning, Error và Fatal
 //	manager.SetMinLevel(handler.WarningLevel)
-func (m *DefaultManager) SetMinLevel(level handler.Level) {
+func (m *manager) SetMinLevel(level handler.Level) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -273,7 +306,7 @@ func (m *DefaultManager) SetMinLevel(level handler.Level) {
 //	if err := manager.Close(); err != nil {
 //	    fmt.Fprintf(os.Stderr, "Lỗi khi đóng log manager: %v\n", err)
 //	}
-func (m *DefaultManager) Close() error {
+func (m *manager) Close() error {
 	// Tạo một bản sao của map handlers để giảm thiểu thời gian giữ lock
 	m.mu.Lock()
 	handlersCopy := make(map[string]handler.Handler, len(m.handlers))
@@ -302,7 +335,7 @@ func (m *DefaultManager) Close() error {
 //   - level: handler.Level - cấp độ log của thông điệp
 //   - message: string - thông điệp log (có thể là chuỗi định dạng)
 //   - args: ...interface{} - tham số tùy chọn để định dạng thông điệp
-func (m *DefaultManager) log(level handler.Level, message string, args ...interface{}) {
+func (m *manager) log(level handler.Level, message string, args ...interface{}) {
 	// Bỏ qua nếu dưới cấp độ tối thiểu
 	if level < m.minLevel {
 		return
