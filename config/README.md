@@ -294,3 +294,56 @@ if authEnabled, ok := cfg.GetBool("services.auth.enabled"); ok && authEnabled {
 6. **Hot reload**: Khi sử dụng `WatchConfig()`, cần đảm bảo việc cập nhật cấu hình không gây ra race condition trong ứng dụng.
 
 7. **Bảo mật**: Tránh lưu thông tin nhạy cảm (mật khẩu, khóa API) trong file cấu hình. Sử dụng biến môi trường hoặc các giải pháp lưu trữ bí mật (secret management) cho những thông tin này.
+
+## Sử dụng trong unit test
+
+Package `config` cung cấp một triển khai giả lập (mock) cho interface Manager thông qua package `config/mocks`, giúp đơn giản hóa việc viết unit test cho các ứng dụng sử dụng cấu hình.
+
+### Mock Manager
+
+```go
+import (
+	"testing"
+	
+	"github.com/go-fork/providers/config/mocks"
+	"github.com/stretchr/testify/assert"
+)
+
+func TestServiceWithConfig(t *testing.T) {
+	// Tạo mock manager
+	mockCfg := mocks.NewMockManager()
+	
+	// Thiết lập dữ liệu giả lập
+	mockCfg.Set("service.enabled", true)
+	mockCfg.Set("service.port", 8080)
+	mockCfg.Set("service.timeout", "30s")
+	
+	// Khởi tạo service với mock config
+	service := NewService(mockCfg)
+	
+	// Kiểm tra kết quả
+	assert.True(t, service.IsEnabled())
+	assert.Equal(t, 8080, service.Port())
+}
+```
+
+### Điều khiển hành vi của mock
+
+```go
+// Thiết lập giá trị trả về cho phương thức Has
+mockCfg.SetHasKey(true) // Has() sẽ luôn trả về true
+
+// Thiết lập map cấu hình hoàn chỉnh
+config := map[string]interface{}{
+	"app.name": "TestApp",
+	"app.version": "1.0.0",
+	"database": map[string]interface{}{
+		"host": "localhost",
+		"port": 5432,
+	},
+}
+mockCfg.SetConfig(config)
+
+// Thiết lập lỗi cho phương thức Unmarshal
+mockCfg.SetUnmarshalError(errors.New("unmarshal error"))
+```
