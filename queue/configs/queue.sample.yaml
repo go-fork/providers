@@ -1,0 +1,75 @@
+# Queue Provider Configuration Sample
+# This file provides a template for configuring the queue provider
+
+# Queue Configuration
+queue:
+  # Adapter Configuration
+  adapter:
+    # Default adapter to use: "memory" or "redis"
+    default: "memory"
+
+    # Memory Adapter Configuration
+    memory:
+      # Prefix to use for queue names in memory
+      prefix: "queue:"
+
+    # Redis Adapter Configuration
+    redis:
+      # Connection settings
+      address: "localhost:6379"
+      password: ""
+      db: 0
+      # Optional TLS configuration
+      tls: false
+      # Prefix to use for queue keys in Redis
+      prefix: "queue:"
+      # Optional Redis Cluster configuration
+      cluster:
+        enabled: false
+        addresses:
+          - "localhost:7000"
+          - "localhost:7001"
+          - "localhost:7002"
+
+  # Server Configuration
+  server:
+    # Number of workers to process tasks concurrently
+    concurrency: 10
+    
+    # Polling interval in milliseconds
+    pollingInterval: 1000
+    
+    # Default queue name if none specified
+    defaultQueue: "default"
+    
+    # Whether to enforce strict queue priority
+    strictPriority: true
+    
+    # Order of queues to process (priority from high to low)
+    queues:
+      - "critical"
+      - "high"
+      - "default"
+      - "low"
+    
+    # Timeout for graceful shutdown (in seconds)
+    shutdownTimeout: 30
+    
+    # Log level: 0=debug, 1=info, 2=warning, 3=error, 4=fatal
+    logLevel: 1
+    
+    # Maximum retry attempts for failed tasks
+    retryLimit: 3
+
+  # Client Configuration
+  client:
+    # Default options for tasks
+    defaultOptions:
+      # Default queue for tasks
+      queue: "default"
+      
+      # Default maximum retry attempts
+      maxRetry: 3
+      
+      # Default timeout for task execution (in minutes)
+      timeout: 30

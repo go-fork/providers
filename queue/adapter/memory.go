@@ -7,25 +7,25 @@ import (
 	"sync"
 )
 
-// MemoryQueue triển khai interface IQueue bằng cách sử dụng bộ nhớ trong.
+// MemoryQueue triển khai interface QueueAdapter bằng cách sử dụng bộ nhớ trong.
 // Struct này cung cấp một triển khai đơn giản của queue cho các trường hợp
 // không yêu cầu persistence hoặc cho môi trường kiểm thử.
-type MemoryQueue struct {
+type memoryQueue struct {
 	queues map[string][][]byte
 	prefix string
 	mutex  sync.RWMutex
 }
 
-// NewMemoryQueue tạo một instance mới của MemoryQueue.
+// NewMemoryQueue tạo một instance mới của memoryQueue.
 // Hàm này khởi tạo một map để lưu trữ các hàng đợi và thiết lập prefix.
 //
 // Trả về:
-//   - *MemoryQueue: Instance mới của MemoryQueue
-func NewMemoryQueue(prefix string) *MemoryQueue {
+//   - QueueAdapter: Instance mới của memoryQueue
+func NewMemoryQueue(prefix string) QueueAdapter {
 	if prefix == "" {
 		prefix = "queue:"
 	}
-	return &MemoryQueue{
+	return &memoryQueue{
 		queues: make(map[string][][]byte),
 		prefix: prefix,
 	}
@@ -40,7 +40,7 @@ func NewMemoryQueue(prefix string) *MemoryQueue {
 //
 // Trả về:
 //   - string: Tên hàng đợi có prefix
-func (q *MemoryQueue) prefixKey(queueName string) string {
+func (q *memoryQueue) prefixKey(queueName string) string {
 	return q.prefix + queueName
 }
 
@@ -56,7 +56,7 @@ func (q *MemoryQueue) prefixKey(queueName string) string {
 //
 // Trả về:
 //   - error: Lỗi nếu có khi thêm item vào hàng đợi
-func (q *MemoryQueue) Enqueue(ctx context.Context, queueName string, item interface{}) error {
+func (q *memoryQueue) Enqueue(ctx context.Context, queueName string, item interface{}) error {
 	data, err := json.Marshal(item)
 	if err != nil {
 		return fmt.Errorf("error marshaling queue item: %w", err)
@@ -85,7 +85,7 @@ func (q *MemoryQueue) Enqueue(ctx context.Context, queueName string, item interf
 //
 // Trả về:
 //   - error: Lỗi nếu có khi lấy item từ hàng đợi hoặc khi hàng đợi rỗng
-func (q *MemoryQueue) Dequeue(ctx context.Context, queueName string, dest interface{}) error {
+func (q *memoryQueue) Dequeue(ctx context.Context, queueName string, dest interface{}) error {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 
@@ -115,7 +115,7 @@ func (q *MemoryQueue) Dequeue(ctx context.Context, queueName string, dest interf
 //
 // Trả về:
 //   - error: Lỗi nếu có khi thêm items vào hàng đợi
-func (q *MemoryQueue) EnqueueBatch(ctx context.Context, queueName string, items []interface{}) error {
+func (q *memoryQueue) EnqueueBatch(ctx context.Context, queueName string, items []interface{}) error {
 	if len(items) == 0 {
 		return nil
 	}
@@ -150,7 +150,7 @@ func (q *MemoryQueue) EnqueueBatch(ctx context.Context, queueName string, items 
 // Trả về:
 //   - int64: Số lượng item trong hàng đợi
 //   - error: Luôn là nil cho implementation này
-func (q *MemoryQueue) Size(ctx context.Context, queueName string) (int64, error) {
+func (q *memoryQueue) Size(ctx context.Context, queueName string) (int64, error) {
 	q.mutex.RLock()
 	defer q.mutex.RUnlock()
 
@@ -173,7 +173,7 @@ func (q *MemoryQueue) Size(ctx context.Context, queueName string) (int64, error)
 // Trả về:
 //   - bool: true nếu hàng đợi rỗng, ngược lại là false
 //   - error: Lỗi nếu có khi kiểm tra
-func (q *MemoryQueue) IsEmpty(ctx context.Context, queueName string) (bool, error) {
+func (q *memoryQueue) IsEmpty(ctx context.Context, queueName string) (bool, error) {
 	size, err := q.Size(ctx, queueName)
 	if err != nil {
 		return false, err
@@ -191,7 +191,7 @@ func (q *MemoryQueue) IsEmpty(ctx context.Context, queueName string) (bool, erro
 //
 // Trả về:
 //   - error: Luôn là nil cho implementation này
-func (q *MemoryQueue) Clear(ctx context.Context, queueName string) error {
+func (q *memoryQueue) Clear(ctx context.Context, queueName string) error {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 

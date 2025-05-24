@@ -5,57 +5,29 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 )
 
-var (
-	redisOnce sync.Once
-)
-
-// IQueue định nghĩa các hoạt động có sẵn cho hàng đợi.
-// Interface này tách biệt các hoạt động hàng đợi khỏi implementation cụ thể,
-// cho phép thay đổi backend mà không ảnh hưởng đến code sử dụng.
-type IQueue interface {
-	// Enqueue thêm một item vào cuối hàng đợi.
-	Enqueue(ctx context.Context, queueName string, item interface{}) error
-
-	// Dequeue lấy và xóa item ở đầu hàng đợi.
-	Dequeue(ctx context.Context, queueName string, dest interface{}) error
-
-	// EnqueueBatch thêm nhiều item vào cuối hàng đợi.
-	EnqueueBatch(ctx context.Context, queueName string, items []interface{}) error
-
-	// Size trả về số lượng item trong hàng đợi.
-	Size(ctx context.Context, queueName string) (int64, error)
-
-	// IsEmpty kiểm tra xem hàng đợi có rỗng không.
-	IsEmpty(ctx context.Context, queueName string) (bool, error)
-
-	// Clear xóa tất cả các item trong hàng đợi.
-	Clear(ctx context.Context, queueName string) error
-}
-
-// RedisQueue triển khai interface IQueue sử dụng Redis.
+// redisQueue triển khai interface QueueAdapter sử dụng Redis.
 // Struct này sử dụng Redis List để lưu trữ và quản lý hàng đợi,
 // cho phép các hoạt động queue có tính mở rộng cao và phân tán.
-type RedisQueue struct {
+type redisQueue struct {
 	client *redis.Client
 	prefix string
 }
 
-// NewRedisQueue tạo một instance mới của RedisQueue.
+// NewRedisQueue tạo một instance mới của redisQueue.
 // Hàm này khởi tạo kết nối Redis và áp dụng prefix cho key.
 //
 // Trả về:
-//   - *RedisQueue: Instance mới của RedisQueue
-func NewRedisQueue(client *redis.Client, prefix string) *RedisQueue {
+//   - QueueAdapter: Instance mới của redisQueue
+func NewRedisQueue(client *redis.Client, prefix string) QueueAdapter {
 	if prefix == "" {
 		prefix = "queue:"
 	}
-	return &RedisQueue{
+	return &redisQueue{
 		client: client,
 		prefix: prefix,
 	}
@@ -70,7 +42,7 @@ func NewRedisQueue(client *redis.Client, prefix string) *RedisQueue {
 //
 // Trả về:
 //   - string: Tên hàng đợi có prefix
-func (q *RedisQueue) prefixKey(queueName string) string {
+func (q *redisQueue) prefixKey(queueName string) string {
 	return q.prefix + queueName
 }
 
@@ -85,7 +57,7 @@ func (q *RedisQueue) prefixKey(queueName string) string {
 //
 // Trả về:
 //   - error: Lỗi nếu có khi thêm item vào hàng đợi
-func (q *RedisQueue) Enqueue(ctx context.Context, queueName string, item interface{}) error {
+func (q *redisQueue) Enqueue(ctx context.Context, queueName string, item interface{}) error {
 	data, err := json.Marshal(item)
 	if err != nil {
 		return fmt.Errorf("error marshaling queue item: %w", err)
@@ -105,7 +77,7 @@ func (q *RedisQueue) Enqueue(ctx context.Context, queueName string, item interfa
 //
 // Trả về:
 //   - error: Lỗi nếu có khi lấy item từ hàng đợi hoặc khi hàng đợi rỗng
-func (q *RedisQueue) Dequeue(ctx context.Context, queueName string, dest interface{}) error {
+func (q *redisQueue) Dequeue(ctx context.Context, queueName string, dest interface{}) error {
 	data, err := q.client.LPop(ctx, q.prefixKey(queueName)).Bytes()
 	if err != nil {
 		if err == redis.Nil {
@@ -128,7 +100,7 @@ func (q *RedisQueue) Dequeue(ctx context.Context, queueName string, dest interfa
 //
 // Trả về:
 //   - error: Lỗi nếu có khi thêm items vào hàng đợi
-func (q *RedisQueue) EnqueueBatch(ctx context.Context, queueName string, items []interface{}) error {
+func (q *redisQueue) EnqueueBatch(ctx context.Context, queueName string, items []interface{}) error {
 	if len(items) == 0 {
 		return nil
 	}
@@ -157,7 +129,7 @@ func (q *RedisQueue) EnqueueBatch(ctx context.Context, queueName string, items [
 // Trả về:
 //   - int64: Số lượng item trong hàng đợi
 //   - error: Lỗi nếu có khi truy vấn Redis
-func (q *RedisQueue) Size(ctx context.Context, queueName string) (int64, error) {
+func (q *redisQueue) Size(ctx context.Context, queueName string) (int64, error) {
 	return q.client.LLen(ctx, q.prefixKey(queueName)).Result()
 }
 
@@ -172,7 +144,7 @@ func (q *RedisQueue) Size(ctx context.Context, queueName string) (int64, error) 
 // Trả về:
 //   - bool: true nếu hàng đợi rỗng, ngược lại là false
 //   - error: Lỗi nếu có khi kiểm tra
-func (q *RedisQueue) IsEmpty(ctx context.Context, queueName string) (bool, error) {
+func (q *redisQueue) IsEmpty(ctx context.Context, queueName string) (bool, error) {
 	size, err := q.Size(ctx, queueName)
 	if err != nil {
 		return false, err
@@ -190,7 +162,7 @@ func (q *RedisQueue) IsEmpty(ctx context.Context, queueName string) (bool, error
 //
 // Trả về:
 //   - error: Lỗi nếu có khi xóa hàng đợi
-func (q *RedisQueue) Clear(ctx context.Context, queueName string) error {
+func (q *redisQueue) Clear(ctx context.Context, queueName string) error {
 	return q.client.Del(ctx, q.prefixKey(queueName)).Err()
 }
 
@@ -206,7 +178,7 @@ func (q *RedisQueue) Clear(ctx context.Context, queueName string) error {
 //
 // Trả về:
 //   - error: Lỗi nếu có khi lấy item hoặc khi hết thời gian chờ
-func (q *RedisQueue) DequeueWithTimeout(ctx context.Context, queueName string, timeout time.Duration, dest interface{}) error {
+func (q *redisQueue) DequeueWithTimeout(ctx context.Context, queueName string, timeout time.Duration, dest interface{}) error {
 	data, err := q.client.BLPop(ctx, timeout, q.prefixKey(queueName)).Result()
 	if err != nil {
 		if err == redis.Nil {

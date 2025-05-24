@@ -32,7 +32,7 @@ type Client interface {
 
 // client triển khai interface Client.
 type client struct {
-	queue       adapter.IQueue
+	queue       adapter.QueueAdapter
 	defaultOpts *TaskOptions
 }
 
@@ -41,6 +41,14 @@ func NewClient(redisClient *redis.Client) Client {
 	queue := adapter.NewRedisQueue(redisClient, "queue:")
 	return &client{
 		queue:       queue,
+		defaultOpts: GetDefaultOptions(),
+	}
+}
+
+// NewClientWithAdapter tạo một Client mới với adapter QueueAdapter.
+func NewClientWithAdapter(adapter adapter.QueueAdapter) Client {
+	return &client{
+		queue:       adapter,
 		defaultOpts: GetDefaultOptions(),
 	}
 }
@@ -55,7 +63,7 @@ func NewClientWithUniversalClient(redisClient redis.UniversalClient) Client {
 			Addr: "localhost:6379",
 		})
 	}
-	
+
 	queue := adapter.NewRedisQueue(redisStdClient, "queue:")
 	return &client{
 		queue:       queue,
@@ -80,7 +88,7 @@ func (c *client) Enqueue(taskName string, payload interface{}, opts ...Option) (
 // EnqueueContext tương tự Enqueue nhưng với context.
 func (c *client) EnqueueContext(ctx context.Context, taskName string, payload interface{}, opts ...Option) (*TaskInfo, error) {
 	options := ApplyOptions(opts...)
-	
+
 	task := &Task{
 		ID:         generateID(),
 		Name:       taskName,
@@ -90,25 +98,25 @@ func (c *client) EnqueueContext(ctx context.Context, taskName string, payload in
 		ProcessAt:  time.Now(),
 		RetryCount: 0,
 	}
-	
+
 	// Nếu có ID tùy chỉnh
 	if options.TaskID != "" {
 		task.ID = options.TaskID
 	}
-	
+
 	// Tạo payload
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal payload: %w", err)
 	}
 	task.Payload = payloadBytes
-	
+
 	// Đưa vào hàng đợi
 	queueName := fmt.Sprintf("%s:pending", task.Queue)
 	if err := c.queue.Enqueue(ctx, queueName, task); err != nil {
 		return nil, fmt.Errorf("failed to enqueue task: %w", err)
 	}
-	
+
 	// Lưu thông tin thời gian xử lý nếu khác thời điểm hiện tại
 	if !options.ProcessAt.IsZero() && options.ProcessAt.After(time.Now()) {
 		scheduledQueue := fmt.Sprintf("%s:scheduled", task.Queue)
@@ -120,14 +128,14 @@ func (c *client) EnqueueContext(ctx context.Context, taskName string, payload in
 			return nil, fmt.Errorf("failed to schedule task: %w", err)
 		}
 	}
-	
+
 	var processTime time.Time
 	if options.ProcessAt.IsZero() {
 		processTime = task.CreatedAt
 	} else {
 		processTime = options.ProcessAt
 	}
-	
+
 	return &TaskInfo{
 		ID:        task.ID,
 		Name:      task.Name,

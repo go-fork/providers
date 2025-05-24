@@ -34,12 +34,19 @@ import (
 func main() {
     app := di.New()
     
-    // Đăng ký service provider với cấu hình Redis
-    app.Register(queue.NewServiceProvider(queue.RedisOptions{
-        Addr:     "localhost:6379",
-        Password: "",
-        DB:       0,
-    }))
+    // Đăng ký service provider với cấu hình mặc định
+    app.Register(queue.NewServiceProvider())
+    
+    // Hoặc đăng ký với cấu hình tùy chỉnh
+    config := queue.Config{
+        DefaultAdapter: "redis",
+        RedisConfig: queue.RedisConfig{
+            Addr:     "localhost:6379",
+            Password: "",
+            DB:       0,
+        },
+    }
+    app.Register(queue.NewServiceProviderWithConfig(config))
     
     // Khởi động ứng dụng (sẽ tự động khởi động queue worker)
     app.Boot()
@@ -52,8 +59,11 @@ func main() {
 ### 2. Thêm tác vụ vào hàng đợi (Producer)
 
 ```go
-// Lấy queue client từ container
+// Lấy queue manager từ container
 container := app.Container()
+manager := container.MustMake("queue").(*queue.Manager)
+
+// Hoặc lấy trực tiếp client từ container
 client := container.MustMake("queue.client").(queue.Client)
 
 // Thêm tác vụ vào hàng đợi để xử lý ngay lập tức

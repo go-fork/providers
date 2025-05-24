@@ -12,10 +12,11 @@
 // - Ưu tiên giữa các hàng đợi khác nhau
 // - Hàng đợi trong bộ nhớ cho môi trường phát triển và kiểm thử
 //
-// Package cung cấp hai thành phần chính:
+// Package cung cấp ba thành phần chính:
 //
-// 1. Client: Cho phép đưa tác vụ vào hàng đợi (producer)
-// 2. Server: Xử lý các tác vụ từ hàng đợi thông qua handlers (consumer)
+// 1. Manager: Quản lý các thành phần trong queue và cung cấp cấu hình
+// 2. Client: Cho phép đưa tác vụ vào hàng đợi (producer)
+// 3. Server: Xử lý các tác vụ từ hàng đợi thông qua handlers (consumer)
 //
 // Hỗ trợ hai adapter chính:
 //
