@@ -38,7 +38,7 @@ Package này giải quyết các vấn đề phổ biến trong quản lý cấu
 | `Has(key string)` | Kiểm tra xem key có tồn tại hay không | `key`: Khóa cấu hình | `bool`: true nếu tồn tại |
 | `AllSettings()` | Trả về tất cả cấu hình dưới dạng map | Không | `map[string]interface{}`: Tất cả cấu hình |
 | `AllKeys()` | Trả về tất cả các khóa có giá trị | Không | `[]string`: Danh sách các khóa |
-| `Unmarshal(key string, target interface{})` | Ánh xạ cấu hình vào một struct Go | `key`: Tiền tố khóa cấu hình<br>`target`: Con trỏ tới struct | `error`: Lỗi nếu có trong quá trình ánh xạ |
+| `Unmarshal(target interface{})` | Ánh xạ toàn bộ cấu hình vào một struct Go | `target`: Con trỏ tới struct | `error`: Lỗi nếu có trong quá trình ánh xạ |
 | `UnmarshalKey(key string, target interface{})` | Ánh xạ một khóa cụ thể vào struct | `key`: Khóa cấu hình<br>`target`: Con trỏ tới struct | `error`: Lỗi nếu có trong quá trình ánh xạ |
 | `SetConfigFile(path string)` | Thiết lập đường dẫn tới file cấu hình | `path`: Đường dẫn đầy đủ tới file | Không |
 | `SetConfigType(configType string)` | Thiết lập định dạng của file cấu hình | `configType`: Định dạng file | Không |
@@ -172,7 +172,7 @@ type AppConfig struct {
 
 // Ánh xạ toàn bộ cấu hình vào struct
 var appConfig AppConfig
-err := cfg.Unmarshal("", &appConfig)
+err := cfg.Unmarshal(&appConfig)
 if err != nil {
 	log.Fatalf("Không thể ánh xạ cấu hình: %v", err)
 }
@@ -190,7 +190,7 @@ var dbConfig struct {
 	Password string `mapstructure:"password"`
 }
 
-err = cfg.Unmarshal("database", &dbConfig)
+err = cfg.UnmarshalKey("database", &dbConfig)
 if err != nil {
 	log.Fatalf("Không thể ánh xạ cấu hình database: %v", err)
 }
@@ -205,7 +205,7 @@ cfg.OnConfigChange(func(e fsnotify.Event) {
 	
 	// Tải lại cấu hình vào struct
 	var appConfig AppConfig
-	err := cfg.Unmarshal("", &appConfig)
+	err := cfg.Unmarshal(&appConfig)
 	if err != nil {
 		log.Printf("Lỗi khi tải lại cấu hình: %v", err)
 		return

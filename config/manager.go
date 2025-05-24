@@ -364,11 +364,11 @@ type Manager interface {
 	//	}
 	//
 	//	var dbConfig DatabaseConfig
-	//	err := cfg.Unmarshal("database", &dbConfig)
+	//	err := cfg.UnmarshalKey("database", &dbConfig)
 	//	if err != nil {
 	//	    log.Fatalf("Không thể unmarshal cấu hình database: %v", err)
 	//	}
-	Unmarshal(key string, target interface{}) error
+	Unmarshal(target interface{}) error
 
 	// UnmarshalKey ánh xạ một khóa cấu hình vào struct.
 	//
@@ -975,40 +975,18 @@ func (m *manager) AllKeys() []string {
 	return m.Viper.AllKeys()
 }
 
-// Unmarshal ánh xạ cấu hình vào một struct Go.
+// Unmarshal ánh xạ toàn bộ cấu hình vào một struct Go.
 //
-// Phương thức này chuyển đổi cấu hình thành một đối tượng struct Go.
-// Nếu key không rỗng, chỉ phần cấu hình tương ứng với key đó được ánh xạ.
-// Nếu key rỗng, toàn bộ cấu hình được ánh xạ vào struct.
+// Phương thức này chuyển đổi toàn bộ cấu hình thành một đối tượng struct Go.
+// Khác với UnmarshalKey, phương thức này luôn ánh xạ toàn bộ cấu hình vào struct.
 //
 // Params:
-//   - key: string - Prefix của cấu hình cần ánh xạ, nếu rỗng thì ánh xạ toàn bộ cấu hình
 //   - target: interface{} - Con trỏ tới struct cần ánh xạ dữ liệu vào
 //
 // Returns:
-//   - error:
-//   - nil nếu ánh xạ thành công
-//   - Lỗi nếu key không tồn tại hoặc không phải là map
-//   - Lỗi nếu không thể ánh xạ giá trị vào struct (kiểu dữ liệu không khớp)
+//   - error: nil nếu ánh xạ thành công, lỗi nếu không thể ánh xạ giá trị vào struct
 //
 // Example:
-//
-//	// Ánh xạ cấu hình database vào struct
-//	type DatabaseConfig struct {
-//	    Host     string   `mapstructure:"host"`
-//	    Port     int      `mapstructure:"port"`
-//	    Username string   `mapstructure:"username"`
-//	    Password string   `mapstructure:"password"`
-//	    Replicas []string `mapstructure:"replicas"`
-//	}
-//
-//	var dbConfig DatabaseConfig
-//	err := cfg.Unmarshal("database", &dbConfig)
-//	if err != nil {
-//	    log.Fatalf("Lỗi khi unmarshal cấu hình database: %v", err)
-//	}
-//
-//	fmt.Printf("Kết nối tới database: %s:%d\n", dbConfig.Host, dbConfig.Port)
 //
 //	// Ánh xạ toàn bộ cấu hình vào struct root
 //	type AppConfig struct {
@@ -1022,23 +1000,24 @@ func (m *manager) AllKeys() []string {
 //	}
 //
 //	var appConfig AppConfig
-//	err = cfg.Unmarshal("", &appConfig)
+//	err := cfg.Unmarshal(&appConfig)
 //	if err != nil {
 //	    log.Fatalf("Lỗi khi unmarshal toàn bộ cấu hình: %v", err)
 //	}
-func (m *manager) Unmarshal(key string, target interface{}) error {
-	if key == "" {
-		// Unmarshal toàn bộ cấu hình
-		return m.Viper.Unmarshal(target)
-	}
-
-	// Unmarshal một phần cấu hình với prefix
-	subV := m.Viper.Sub(key)
-	if subV == nil {
-		return fmt.Errorf("key %s not found or not a map", key)
-	}
-
-	return subV.Unmarshal(target)
+//
+//	// Để ánh xạ một phần cụ thể của cấu hình, hãy sử dụng UnmarshalKey thay thế
+//	type DatabaseConfig struct {
+//	    Host     string   `mapstructure:"host"`
+//	    Port     int      `mapstructure:"port"`
+//	    Username string   `mapstructure:"username"`
+//	    Password string   `mapstructure:"password"`
+//	    Replicas []string `mapstructure:"replicas"`
+//	}
+//
+//	var dbConfig DatabaseConfig
+//	err = cfg.UnmarshalKey("database", &dbConfig)
+func (m *manager) Unmarshal(target interface{}) error {
+	return m.Viper.Unmarshal(target)
 }
 
 // UnmarshalKey ánh xạ một khóa cấu hình duy nhất vào một struct.

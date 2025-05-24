@@ -70,7 +70,7 @@
 //	}
 //
 //	var dbConfig DatabaseConfig
-//	err = cfg.Unmarshal("database", &dbConfig)
+//	err = cfg.UnmarshalKey("database", &dbConfig)
 //	if err != nil {
 //	    log.Fatalf("Lỗi unmarshalling cấu hình database: %v", err)
 //	}
