@@ -1,650 +1,1162 @@
+// Package config cung cấp giải pháp quản lý cấu hình linh hoạt và mở rộng cho ứng dụng Go.
 package config
 
 import (
-	"errors"
 	"fmt"
-	"reflect"
+	"io"
 	"strings"
-	"sync"
+	"time"
 
-	"github.com/go-fork/providers/config/formatter"
-	"github.com/go-fork/providers/config/model"
-	"github.com/go-fork/providers/config/utils"
+	"github.com/fsnotify/fsnotify"
+	"github.com/spf13/viper"
 )
 
-// Định nghĩa các lỗi tiêu chuẩn
-var (
-	// ErrInvalidKey là lỗi khi key không hợp lệ (rỗng, ký tự đặc biệt)
-	ErrInvalidKey = errors.New("invalid configuration key")
-
-	// ErrKeyNotFound là lỗi khi key không tồn tại
-	ErrKeyNotFound = errors.New("configuration key not found")
-
-	// ErrTypeMismatch là lỗi khi kiểu dữ liệu không khớp
-	ErrTypeMismatch = errors.New("configuration type mismatch")
-
-	// ErrInvalidTarget là lỗi khi target không phải con trỏ hoặc struct
-	ErrInvalidTarget = errors.New("invalid unmarshal target")
-
-	// ErrParseFailed là lỗi khi parse dữ liệu thất bại
-	ErrParseFailed = errors.New("configuration parse failed")
-)
-
-// Config là interface chính cho việc quản lý cấu hình.
-type Config interface {
+// Manager là interface chính cho việc quản lý cấu hình, bao bọc và mở rộng chức năng
+// của thư viện Viper. Interface này cung cấp các phương thức để truy xuất và quản lý
+// cấu hình với API nhất quán và an toàn về kiểu dữ liệu.
+type Manager interface {
 	// GetString trả về giá trị chuỗi cho key.
+	//
+	// Params:
+	//   - key: string - Khóa cấu hình cần truy xuất, hỗ trợ dot notation (vd: "app.name")
+	//
+	// Returns:
+	//   - string: Giá trị chuỗi nếu key tồn tại
+	//   - bool: true nếu key tồn tại, ngược lại là false
+	//
+	// Example:
+	//
+	//	if name, ok := cfg.GetString("app.name"); ok {
+	//	    fmt.Printf("App name: %s\n", name)
+	//	}
 	GetString(key string) (string, bool)
 
 	// GetInt trả về giá trị số nguyên cho key.
+	//
+	// Params:
+	//   - key: string - Khóa cấu hình cần truy xuất
+	//
+	// Returns:
+	//   - int: Giá trị số nguyên nếu key tồn tại và giá trị hợp lệ
+	//   - bool: true nếu key tồn tại và giá trị có thể chuyển đổi thành int, ngược lại là false
+	//
+	// Example:
+	//
+	//	if port, ok := cfg.GetInt("server.port"); ok {
+	//	    server.Listen(port)
+	//	}
 	GetInt(key string) (int, bool)
 
 	// GetBool trả về giá trị boolean cho key.
+	//
+	// Params:
+	//   - key: string - Khóa cấu hình cần truy xuất
+	//
+	// Returns:
+	//   - bool: Giá trị boolean nếu key tồn tại và giá trị hợp lệ
+	//   - bool: true nếu key tồn tại và giá trị có thể chuyển đổi thành boolean, ngược lại là false
+	//
+	// Lưu ý: Các giá trị "true", "1", "t", "yes", "y", "on" được coi là true,
+	// các giá trị khác được coi là false
+	//
+	// Example:
+	//
+	//	if debug, ok := cfg.GetBool("app.debug"); ok && debug {
+	//	    enableDebugging()
+	//	}
 	GetBool(key string) (bool, bool)
 
 	// GetFloat trả về giá trị số thực cho key.
+	//
+	// Params:
+	//   - key: string - Khóa cấu hình cần truy xuất
+	//
+	// Returns:
+	//   - float64: Giá trị số thực nếu key tồn tại và giá trị hợp lệ
+	//   - bool: true nếu key tồn tại và giá trị có thể chuyển đổi thành float64, ngược lại là false
+	//
+	// Example:
+	//
+	//	if ratio, ok := cfg.GetFloat("scaling.ratio"); ok {
+	//	    applyScaling(ratio)
+	//	}
 	GetFloat(key string) (float64, bool)
 
-	// GetSlice trả về giá trị slice cho key.
+	// GetDuration trả về giá trị khoảng thời gian (Duration) cho key.
+	//
+	// Params:
+	//   - key: string - Khóa cấu hình cần truy xuất
+	//
+	// Returns:
+	//   - time.Duration: Giá trị khoảng thời gian nếu key tồn tại và giá trị hợp lệ
+	//   - bool: true nếu key tồn tại và giá trị có thể chuyển đổi thành Duration, ngược lại là false
+	//
+	// Lưu ý: Hỗ trợ chuỗi format như "5s", "2m", "1h30m" hoặc số nguyên (đơn vị là nanosecond)
+	//
+	// Example:
+	//
+	//	if timeout, ok := cfg.GetDuration("http.timeout"); ok {
+	//	    client.Timeout = timeout
+	//	}
+	GetDuration(key string) (time.Duration, bool)
+
+	// GetTime trả về giá trị thời gian (Time) cho key.
+	//
+	// Params:
+	//   - key: string - Khóa cấu hình cần truy xuất
+	//
+	// Returns:
+	//   - time.Time: Giá trị thời gian nếu key tồn tại và giá trị hợp lệ
+	//   - bool: true nếu key tồn tại và giá trị có thể chuyển đổi thành Time, ngược lại là false
+	//
+	// Example:
+	//
+	//	if startTime, ok := cfg.GetTime("schedule.start"); ok {
+	//	    scheduler.SetStartTime(startTime)
+	//	}
+	GetTime(key string) (time.Time, bool)
+
+	// GetSlice trả về giá trị slice (mảng các phần tử) cho key.
+	//
+	// Params:
+	//   - key: string - Khóa cấu hình cần truy xuất
+	//
+	// Returns:
+	//   - []interface{}: Mảng các giá trị nếu key tồn tại và giá trị là slice
+	//   - bool: true nếu key tồn tại và giá trị là slice, ngược lại là false
+	//
+	// Example:
+	//
+	//	if items, ok := cfg.GetSlice("inventory.items"); ok {
+	//	    for _, item := range items {
+	//	        processItem(item)
+	//	    }
+	//	}
 	GetSlice(key string) ([]interface{}, bool)
 
-	// GetMap trả về giá trị map cho key.
+	// GetStringSlice trả về giá trị slice chuỗi cho key.
+	//
+	// Params:
+	//   - key: string - Khóa cấu hình cần truy xuất
+	//
+	// Returns:
+	//   - []string: Mảng các chuỗi nếu key tồn tại và giá trị có thể chuyển đổi thành slice chuỗi
+	//   - bool: true nếu key tồn tại, ngược lại là false
+	//
+	// Lưu ý: Các phần tử không phải chuỗi sẽ được chuyển đổi thành chuỗi
+	//
+	// Example:
+	//
+	//	if hosts, ok := cfg.GetStringSlice("database.replicas"); ok {
+	//	    for _, host := range hosts {
+	//	        pool.AddReplica(host)
+	//	    }
+	//	}
+	GetStringSlice(key string) ([]string, bool)
+
+	// GetIntSlice trả về giá trị slice số nguyên cho key.
+	//
+	// Params:
+	//   - key: string - Khóa cấu hình cần truy xuất
+	//
+	// Returns:
+	//   - []int: Mảng các số nguyên nếu key tồn tại và giá trị có thể chuyển đổi thành slice số nguyên
+	//   - bool: true nếu key tồn tại, ngược lại là false
+	//
+	// Lưu ý: Các phần tử không phải số nguyên sẽ được chuyển đổi nếu có thể
+	//
+	// Example:
+	//
+	//	if ports, ok := cfg.GetIntSlice("server.ports"); ok {
+	//	    for _, port := range ports {
+	//	        listeners = append(listeners, listenOn(port))
+	//	    }
+	//	}
+	GetIntSlice(key string) ([]int, bool)
+
+	// GetMap trả về giá trị map (bảng băm) cho key.
+	//
+	// Params:
+	//   - key: string - Khóa cấu hình cần truy xuất
+	//
+	// Returns:
+	//   - map[string]interface{}: Map các giá trị nếu key tồn tại và giá trị là map hoặc có thể xây dựng từ subkeys
+	//   - bool: true nếu key tồn tại và giá trị là map, hoặc có subkeys, ngược lại là false
+	//
+	// Lưu ý: Cơ chế này có thể xây dựng map từ các subkey có cùng prefix
+	//
+	// Example:
+	//
+	//	if dbConfig, ok := cfg.GetMap("database"); ok {
+	//	    host := dbConfig["host"].(string)
+	//	    port := dbConfig["port"].(int)
+	//	    connectToDatabase(host, port)
+	//	}
 	GetMap(key string) (map[string]interface{}, bool)
 
+	// GetStringMap trả về giá trị liên kết với key dưới dạng map các interface{}.
+	//
+	// Params:
+	//   - key: string - Khóa cấu hình cần truy xuất
+	//
+	// Returns:
+	//   - map[string]interface{}: Map các giá trị nếu key tồn tại
+	//   - bool: true nếu key tồn tại, ngược lại là false
+	//
+	// Example:
+	//
+	//	if settings, ok := cfg.GetStringMap("app.settings"); ok {
+	//	    for k, v := range settings {
+	//	        fmt.Printf("%s: %v\n", k, v)
+	//	    }
+	//	}
+	GetStringMap(key string) (map[string]interface{}, bool)
+
+	// GetStringMapString trả về giá trị liên kết với key dưới dạng map các chuỗi.
+	//
+	// Params:
+	//   - key: string - Khóa cấu hình cần truy xuất
+	//
+	// Returns:
+	//   - map[string]string: Map các chuỗi nếu key tồn tại
+	//   - bool: true nếu key tồn tại, ngược lại là false
+	//
+	// Example:
+	//
+	//	if headers, ok := cfg.GetStringMapString("http.headers"); ok {
+	//	    for name, value := range headers {
+	//	        req.Header.Set(name, value)
+	//	    }
+	//	}
+	GetStringMapString(key string) (map[string]string, bool)
+
+	// GetStringMapStringSlice trả về giá trị liên kết với key dưới dạng map với giá trị là slice chuỗi.
+	//
+	// Params:
+	//   - key: string - Khóa cấu hình cần truy xuất
+	//
+	// Returns:
+	//   - map[string][]string: Map của các slice chuỗi nếu key tồn tại
+	//   - bool: true nếu key tồn tại, ngược lại là false
+	//
+	// Example:
+	//
+	//	if routeParams, ok := cfg.GetStringMapStringSlice("routes.parameters"); ok {
+	//	    for route, params := range routeParams {
+	//	        router.RegisterParams(route, params)
+	//	    }
+	//	}
+	GetStringMapStringSlice(key string) (map[string][]string, bool)
+
+	// Get trả về giá trị cho key theo kiểu gốc của nó.
+	//
+	// Params:
+	//   - key: string - Khóa cấu hình cần truy xuất
+	//
+	// Returns:
+	//   - interface{}: Giá trị gốc nếu key tồn tại
+	//   - bool: true nếu key tồn tại, ngược lại là false
+	//
+	// Example:
+	//
+	//	if value, ok := cfg.Get("complex.setting"); ok {
+	//	    // Xử lý giá trị theo kiểu dữ liệu cụ thể
+	//	    switch v := value.(type) {
+	//	    case map[string]interface{}:
+	//	        // Xử lý map
+	//	    case []interface{}:
+	//	        // Xử lý slice
+	//	    }
+	//	}
+	Get(key string) (interface{}, bool)
+
 	// Set cập nhật hoặc thêm một giá trị vào cấu hình.
+	//
+	// Params:
+	//   - key: string - Khóa cấu hình cần thiết lập, không được rỗng
+	//   - value: interface{} - Giá trị cần thiết lập
+	//
+	// Returns:
+	//   - error: Lỗi nếu key rỗng, nil nếu thành công
+	//
+	// Example:
+	//
+	//	err := cfg.Set("app.version", "1.0.0")
+	//	if err != nil {
+	//	    log.Fatalf("Không thể thiết lập cấu hình: %v", err)
+	//	}
 	Set(key string, value interface{}) error
 
+	// SetDefault thiết lập giá trị mặc định cho key.
+	//
+	// Giá trị mặc định được sử dụng khi key không được thiết lập ở bất kỳ nguồn nào khác
+	// (file, biến môi trường, Set trực tiếp).
+	//
+	// Params:
+	//   - key: string - Khóa cấu hình cần thiết lập giá trị mặc định
+	//   - value: interface{} - Giá trị mặc định
+	//
+	// Example:
+	//
+	//	cfg.SetDefault("server.port", 8080)
+	//	cfg.SetDefault("log.level", "info")
+	SetDefault(key string, value interface{})
+
 	// Has kiểm tra xem key có tồn tại hay không.
+	//
+	// Params:
+	//   - key: string - Khóa cấu hình cần kiểm tra
+	//
+	// Returns:
+	//   - bool: true nếu key tồn tại, ngược lại là false
+	//
+	// Example:
+	//
+	//	if cfg.Has("database.username") {
+	//	    // Thiết lập kết nối database với thông tin xác thực
+	//	} else {
+	//	    // Sử dụng kết nối không xác thực hoặc mặc định
+	//	}
 	Has(key string) bool
 
+	// AllSettings trả về tất cả cấu hình dưới dạng map.
+	//
+	// Returns:
+	//   - map[string]interface{}: Tất cả cấu hình hiện tại
+	//
+	// Example:
+	//
+	//	settings := cfg.AllSettings()
+	//	jsonConfig, _ := json.MarshalIndent(settings, "", "  ")
+	//	fmt.Println("Cấu hình hiện tại:", string(jsonConfig))
+	AllSettings() map[string]interface{}
+
+	// AllKeys trả về tất cả các khóa có giá trị, bất kể chúng được thiết lập ở đâu.
+	//
+	// Returns:
+	//   - []string: Danh sách tất cả các khóa đang có giá trị
+	//
+	// Example:
+	//
+	//	keys := cfg.AllKeys()
+	//	fmt.Println("Tất cả các khóa cấu hình:")
+	//	for _, key := range keys {
+	//	    fmt.Printf("- %s\n", key)
+	//	}
+	AllKeys() []string
+
 	// Unmarshal ánh xạ cấu hình vào một struct Go.
+	//
+	// Params:
+	//   - key: string - Prefix của cấu hình cần ánh xạ, nếu rỗng thì ánh xạ toàn bộ cấu hình
+	//   - target: interface{} - Con trỏ tới struct cần ánh xạ dữ liệu vào
+	//
+	// Returns:
+	//   - error: Lỗi nếu có trong quá trình ánh xạ, nil nếu thành công
+	//
+	// Example:
+	//
+	//	type DatabaseConfig struct {
+	//	    Host     string `mapstructure:"host"`
+	//	    Port     int    `mapstructure:"port"`
+	//	    Username string `mapstructure:"username"`
+	//	    Password string `mapstructure:"password"`
+	//	}
+	//
+	//	var dbConfig DatabaseConfig
+	//	err := cfg.Unmarshal("database", &dbConfig)
+	//	if err != nil {
+	//	    log.Fatalf("Không thể unmarshal cấu hình database: %v", err)
+	//	}
 	Unmarshal(key string, target interface{}) error
 
-	// Load tải cấu hình từ một formatter.
-	Load(f formatter.Formatter) error
+	// UnmarshalKey ánh xạ một khóa cấu hình vào struct.
+	//
+	// Phương thức này tương tự Unmarshal nhưng chỉ hoạt động với một khóa duy nhất.
+	//
+	// Params:
+	//   - key: string - Khóa cấu hình cần ánh xạ
+	//   - target: interface{} - Con trỏ tới struct cần ánh xạ dữ liệu vào
+	//
+	// Returns:
+	//   - error: Lỗi nếu có trong quá trình ánh xạ, nil nếu thành công
+	//
+	// Example:
+	//
+	//	type ServerConfig struct {
+	//	    Port    int      `mapstructure:"port"`
+	//	    Host    string   `mapstructure:"host"`
+	//	    Domains []string `mapstructure:"domains"`
+	//	}
+	//
+	//	var serverCfg ServerConfig
+	//	err := cfg.UnmarshalKey("server", &serverCfg)
+	UnmarshalKey(key string, target interface{}) error
+
+	// SetConfigFile thiết lập đường dẫn tới file cấu hình.
+	//
+	// Params:
+	//   - path: string - Đường dẫn đầy đủ tới file cấu hình
+	//
+	// Example:
+	//
+	//	cfg.SetConfigFile("/etc/myapp/config.yaml")
+	//	err := cfg.ReadInConfig()
+	SetConfigFile(path string)
+
+	// SetConfigType thiết lập định dạng của file cấu hình.
+	//
+	// Định dạng này được sử dụng khi đọc cấu hình từ buffer hoặc
+	// khi file cấu hình không có phần mở rộng để xác định định dạng.
+	//
+	// Params:
+	//   - configType: string - Định dạng của file cấu hình (json, toml, yaml, yml, ini, hcl, env, props)
+	//
+	// Example:
+	//
+	//	cfg.SetConfigType("yaml")
+	//	cfg.ReadConfig(bytes.NewBuffer(yamlConfig))
+	SetConfigType(configType string)
+
+	// SetConfigName thiết lập tên cho file cấu hình (không bao gồm phần mở rộng).
+	//
+	// Params:
+	//   - name: string - Tên file cấu hình không có phần mở rộng
+	//
+	// Lưu ý: Phần mở rộng sẽ được tự động xác định dựa trên các định dạng hỗ trợ
+	//
+	// Example:
+	//
+	//	// Tìm file "config.yaml", "config.json", v.v. trong các đường dẫn đã thêm
+	//	cfg.SetConfigName("config")
+	SetConfigName(name string)
+
+	// AddConfigPath thêm đường dẫn để tìm kiếm file cấu hình.
+	//
+	// Params:
+	//   - path: string - Đường dẫn để Viper tìm kiếm file cấu hình
+	//
+	// Lưu ý: Có thể gọi nhiều lần để thêm nhiều đường dẫn
+	//
+	// Example:
+	//
+	//	cfg.SetConfigName("config")
+	//	cfg.AddConfigPath(".")
+	//	cfg.AddConfigPath("/etc/myapp/")
+	//	cfg.AddConfigPath("$HOME/.myapp")
+	//	err := cfg.ReadInConfig()
+	AddConfigPath(path string)
+
+	// ReadInConfig tìm kiếm và đọc file cấu hình từ đĩa hoặc key/value store,
+	// từ một trong các đường dẫn đã định nghĩa.
+	//
+	// Returns:
+	//   - error: Lỗi nếu không tìm thấy file cấu hình hoặc không thể đọc,
+	//     nil nếu thành công
+	//
+	// Example:
+	//
+	//	cfg.SetConfigName("config")
+	//	cfg.AddConfigPath(".")
+	//	err := cfg.ReadInConfig()
+	//	if err != nil {
+	//	    if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+	//	        // File không tồn tại, sử dụng giá trị mặc định
+	//	    } else {
+	//	        // Có lỗi khác khi đọc file
+	//	        log.Fatalf("Không thể đọc cấu hình: %v", err)
+	//	    }
+	//	}
+	ReadInConfig() error
+
+	// MergeInConfig gộp file cấu hình mới với cấu hình hiện tại.
+	//
+	// Tìm kiếm và đọc file cấu hình từ đĩa hoặc key/value store,
+	// sau đó gộp với cấu hình đã có.
+	//
+	// Returns:
+	//   - error: Lỗi nếu không tìm thấy file cấu hình hoặc không thể đọc,
+	//     nil nếu thành công
+	//
+	// Example:
+	//
+	//	// Đọc cấu hình chính
+	//	cfg.SetConfigFile("config.yaml")
+	//	cfg.ReadInConfig()
+	//
+	//	// Gộp với cấu hình bổ sung
+	//	cfg.SetConfigFile("config.local.yaml")
+	//	err := cfg.MergeInConfig()
+	MergeInConfig() error
+
+	// WriteConfig ghi cấu hình hiện tại vào file.
+	//
+	// Sẽ ghi đè lên file nếu nó đã tồn tại. Sẽ báo lỗi nếu không có file
+	// cấu hình nào được thiết lập trước đó.
+	//
+	// Returns:
+	//   - error: Lỗi trong quá trình ghi file, nil nếu thành công
+	//
+	// Example:
+	//
+	//	cfg.SetConfigFile("config.yaml")
+	//	cfg.Set("database.host", "localhost")
+	//	err := cfg.WriteConfig()
+	WriteConfig() error
+
+	// SafeWriteConfig ghi cấu hình hiện tại vào file chỉ khi file không tồn tại.
+	//
+	// Sẽ không ghi đè lên file nếu nó đã tồn tại. Sẽ báo lỗi nếu không có file
+	// cấu hình nào được thiết lập trước đó.
+	//
+	// Returns:
+	//   - error: Lỗi trong quá trình ghi file hoặc nếu file đã tồn tại, nil nếu thành công
+	//
+	// Example:
+	//
+	//	cfg.SetConfigFile("config.yaml")
+	//	cfg.Set("app.name", "MyApp")
+	//	err := cfg.SafeWriteConfig()
+	SafeWriteConfig() error
+
+	// WriteConfigAs ghi cấu hình hiện tại vào file với tên được chỉ định.
+	//
+	// Sẽ ghi đè lên file nếu nó đã tồn tại.
+	//
+	// Params:
+	//   - filename: string - Đường dẫn tới file cấu hình để ghi
+	//
+	// Returns:
+	//   - error: Lỗi trong quá trình ghi file, nil nếu thành công
+	//
+	// Example:
+	//
+	//	cfg.Set("version", "1.0.0")
+	//	err := cfg.WriteConfigAs("/etc/myapp/config.yaml")
+	WriteConfigAs(filename string) error
+
+	// SafeWriteConfigAs ghi cấu hình hiện tại vào file với tên được chỉ định
+	// chỉ khi file không tồn tại.
+	//
+	// Sẽ không ghi đè lên file nếu nó đã tồn tại.
+	//
+	// Params:
+	//   - filename: string - Đường dẫn tới file cấu hình để ghi
+	//
+	// Returns:
+	//   - error: Lỗi trong quá trình ghi file hoặc nếu file đã tồn tại, nil nếu thành công
+	//
+	// Example:
+	//
+	//	cfg.Set("version", "1.0.0")
+	//	err := cfg.SafeWriteConfigAs("/etc/myapp/config.default.yaml")
+	SafeWriteConfigAs(filename string) error
+
+	// WatchConfig theo dõi file cấu hình và tự động tải lại khi có thay đổi.
+	//
+	// Phương thức này khởi tạo quá trình theo dõi file cấu hình trong nền.
+	// Khi phát hiện thay đổi, cấu hình sẽ được tải lại tự động.
+	//
+	// Lưu ý: Hãy gọi OnConfigChange để đăng ký hàm callback xử lý sự kiện thay đổi
+	//
+	// Example:
+	//
+	//	cfg.OnConfigChange(func(e fsnotify.Event) {
+	//	    fmt.Println("Cấu hình đã thay đổi:", e.Name)
+	//	})
+	//	cfg.WatchConfig()
+	WatchConfig()
+
+	// OnConfigChange thiết lập callback để chạy khi cấu hình thay đổi.
+	//
+	// Params:
+	//   - callback: func(fsnotify.Event) - Hàm callback được gọi khi phát hiện thay đổi
+	//
+	// Lưu ý: Phải gọi WatchConfig() sau khi thiết lập callback này để kích hoạt theo dõi
+	//
+	// Example:
+	//
+	//	cfg.OnConfigChange(func(e fsnotify.Event) {
+	//	    log.Printf("Phát hiện thay đổi cấu hình: %s", e.Name)
+	//	    // Thực hiện các hành động cần thiết, ví dụ tải lại dịch vụ
+	//	    if err := reloadServices(); err != nil {
+	//	        log.Printf("Lỗi khi tải lại dịch vụ: %v", err)
+	//	    }
+	//	})
+	//	cfg.WatchConfig()
+	OnConfigChange(callback func(event fsnotify.Event))
+
+	// SetEnvPrefix thiết lập tiền tố cho biến môi trường.
+	//
+	// Tất cả biến môi trường được sử dụng để ghi đè cấu hình sẽ được tìm kiếm
+	// với tiền tố này, trừ khi được ràng buộc thông qua BindEnv.
+	//
+	// Params:
+	//   - prefix: string - Tiền tố cho các biến môi trường
+	//
+	// Example:
+	//
+	//	// Thiết lập tiền tố "MYAPP_" cho biến môi trường
+	//	cfg.SetEnvPrefix("MYAPP")
+	//	cfg.AutomaticEnv()
+	//	// Giờ biến môi trường MYAPP_DATABASE_HOST sẽ được ánh xạ tới database.host
+	SetEnvPrefix(prefix string)
+
+	// AutomaticEnv kích hoạt tự động hỗ trợ biến môi trường.
+	//
+	// Sau khi gọi phương thức này, mọi truy cập vào cấu hình sẽ kiểm tra xem
+	// có biến môi trường phù hợp không và sử dụng giá trị từ đó nếu có.
+	//
+	// Tên biến môi trường được tạo thành từ:
+	//   - Tiền tố (nếu có, từ SetEnvPrefix)
+	//   - Tên khóa với dấu chấm (".") được thay thế bằng dấu gạch dưới ("_")
+	//
+	// Example:
+	//
+	//	cfg.SetEnvPrefix("MYAPP")
+	//	cfg.AutomaticEnv()
+	//	// Giờ đây, khi gọi cfg.GetString("database.host"), sẽ kiểm tra MYAPP_DATABASE_HOST
+	AutomaticEnv()
+
+	// BindEnv ràng buộc một khóa Viper với biến môi trường.
+	//
+	// Params:
+	//   - input: ...string - Tham số biến đổi:
+	//     - Nếu có 1 tham số: khóa Viper và tên biến môi trường được coi là giống nhau
+	//     - Nếu có 2 tham số: tham số đầu là khóa Viper, tham số thứ hai là tên biến môi trường
+	//
+	// Returns:
+	//   - error: Lỗi nếu không thể ràng buộc, nil nếu thành công
+	//
+	// Example:
+	//
+	//	// Ràng buộc "port" với biến môi trường "PORT"
+	//	cfg.BindEnv("port")
+	//
+	//	// Ràng buộc "database.host" với biến môi trường "DB_HOST"
+	//	cfg.BindEnv("database.host", "DB_HOST")
+	BindEnv(input ...string) error
+
+	// MergeConfig gộp cấu hình mới với cấu hình hiện tại.
+	//
+	// Params:
+	//   - in: io.Reader - Reader chứa cấu hình cần gộp
+	//
+	// Returns:
+	//   - error: Lỗi nếu không thể đọc hoặc gộp cấu hình, nil nếu thành công
+	//
+	// Example:
+	//
+	//	configData := []byte(`{"feature": {"enabled": true}}`)
+	//	err := cfg.MergeConfig(bytes.NewBuffer(configData))
+	//	if err != nil {
+	//	    log.Fatalf("Không thể gộp cấu hình: %v", err)
+	//	}
+	MergeConfig(in io.Reader) error
 }
 
-// DefaultConfig triển khai interface Config.
-type DefaultConfig struct {
-	formatters []formatter.Formatter    // Danh sách formatter
-	configMap  model.ConfigMap          // Map phẳng
-	mu         sync.RWMutex             // Thread-safe
-	opts       formatter.FlattenOptions // Tùy chọn flatten
+// manager là struct triển khai interface Manager bằng cách nhúng Viper.
+//
+// manager sử dụng mô hình composition (nhúng struct) để kế thừa tất cả các phương thức
+// của thư viện Viper, đồng thời mở rộng và chuẩn hóa API để phù hợp với interface Manager.
+// Sử dụng mô hình này giúp dễ dàng tích hợp và mở rộng thư viện Viper mà không cần
+// thay đổi mã nguồn gốc.
+type manager struct {
+	*viper.Viper // Nhúng Viper để thừa kế tính năng
 }
 
-// NewConfig tạo một đối tượng Config mới.
-func NewConfig() *DefaultConfig {
-	return &DefaultConfig{
-		formatters: []formatter.Formatter{},
-		configMap:  make(model.ConfigMap),
-		opts:       formatter.DefaultFlattenOptions(),
-	}
+// NewConfig tạo một đối tượng Manager mới sử dụng Viper làm backend.
+//
+// Hàm này khởi tạo một instance mới của Viper và cấu hình các thiết lập cơ bản,
+// sau đó đóng gói trong struct manager để triển khai interface Manager.
+//
+// Returns:
+//   - Manager: Đối tượng Manager cài đặt đầy đủ interface, sẵn sàng sử dụng
+//
+// Example:
+//
+//	cfg := config.NewConfig()
+//	cfg.SetConfigFile("config.yaml")
+//	err := cfg.ReadInConfig()
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//	appName, _ := cfg.GetString("app.name")
+func NewConfig() Manager {
+	v := viper.New()
+	v.AutomaticEnv() // Tự động đọc từ biến môi trường
+
+	return &manager{Viper: v}
 }
 
-// Load tải cấu hình từ một formatter, ghi đè các giá trị hiện có.
-func (c *DefaultConfig) Load(f formatter.Formatter) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// Load dữ liệu từ formatter
-	data, err := f.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load configuration: %w", err)
+// Get trả về giá trị cho key theo kiểu gốc của nó.
+//
+// Phương thức này trả về giá trị cấu hình theo kiểu dữ liệu gốc của nó
+// (map, slice, string, number, boolean, v.v.) và một boolean cho biết key có tồn tại không.
+//
+// Params:
+//   - key: string - Khóa cấu hình cần truy xuất
+//
+// Returns:
+//   - interface{}: Giá trị gốc nếu key tồn tại, nil nếu không
+//   - bool: true nếu key tồn tại, false nếu không
+//
+// Example:
+//
+//	if value, ok := cfg.Get("api.limits"); ok {
+//	    // Kiểm tra kiểu dữ liệu của giá trị
+//	    switch v := value.(type) {
+//	    case map[string]interface{}:
+//	        fmt.Printf("API limits có %d thiết lập\n", len(v))
+//	        if maxRequests, exists := v["max_requests"]; exists {
+//	            fmt.Printf("Max requests: %v\n", maxRequests)
+//	        }
+//	    case int:
+//	        fmt.Printf("API limit: %d\n", v)
+//	    default:
+//	        fmt.Printf("API limits có kiểu không xác định: %T\n", v)
+//	    }
+//	} else {
+//	    fmt.Println("Không tìm thấy cấu hình api.limits")
+//	}
+func (m *manager) Get(key string) (interface{}, bool) {
+	if !m.Viper.IsSet(key) {
+		return nil, false
 	}
-
-	// Parse dữ liệu
-	parsedData, err := f.Parse(data)
-	if err != nil {
-		return fmt.Errorf("failed to parse configuration: %w", err)
-	}
-
-	// Flatten dữ liệu
-	configMap, err := f.Flatten(parsedData, c.opts)
-	if err != nil {
-		return fmt.Errorf("failed to flatten configuration: %w", err)
-	}
-
-	// Merge với configMap hiện tại
-	for key, value := range configMap {
-		c.configMap[key] = value
-	}
-
-	return nil
-}
-
-// LoadAll tải cấu hình từ tất cả formatter đã đăng ký theo thứ tự ưu tiên.
-func (c *DefaultConfig) LoadAll() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// Xóa configMap hiện tại
-	c.configMap = make(model.ConfigMap)
-
-	// Duyệt qua các formatter theo thứ tự ưu tiên từ thấp đến cao
-	for i := len(c.formatters) - 1; i >= 0; i-- {
-		f := c.formatters[i]
-
-		// Load dữ liệu
-		data, err := f.Load()
-		if err != nil {
-			continue // Bỏ qua formatter nếu lỗi
-		}
-
-		// Parse dữ liệu
-		parsedData, err := f.Parse(data)
-		if err != nil {
-			continue
-		}
-
-		// Flatten dữ liệu
-		configMap, err := f.Flatten(parsedData, c.opts)
-		if err != nil {
-			continue
-		}
-
-		// Merge với configMap
-		for key, value := range configMap {
-			c.configMap[key] = value
-		}
-	}
-
-	return nil
+	return m.Viper.Get(key), true
 }
 
 // GetString trả về giá trị chuỗi cho key.
-func (c *DefaultConfig) GetString(key string) (string, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	if val, ok := c.configMap[key]; ok {
-		switch val.Type {
-		case model.TypeString:
-			str, _ := val.Value.(string)
-			return str, true
-		case model.TypeInt, model.TypeFloat, model.TypeBool:
-			str, _ := utils.ToString(val.Value)
-			return str, true
-		default:
-			return "", false
-		}
+//
+// Phương thức này trả về giá trị cấu hình dưới dạng chuỗi và một boolean
+// cho biết key có tồn tại không. Viper sẽ tự động chuyển đổi các kiểu dữ liệu khác
+// thành chuỗi nếu có thể.
+//
+// Params:
+//   - key: string - Khóa cấu hình cần truy xuất
+//
+// Returns:
+//   - string: Giá trị chuỗi nếu key tồn tại, chuỗi rỗng nếu không
+//   - bool: true nếu key tồn tại, false nếu không
+//
+// Example:
+//
+//	if dbHost, ok := cfg.GetString("database.host"); ok {
+//	    fmt.Printf("Kết nối tới database host: %s\n", dbHost)
+//	    // Sử dụng dbHost để thiết lập kết nối
+//	    conn := database.Connect(dbHost)
+//	} else {
+//	    fmt.Println("Không tìm thấy cấu hình database.host, sử dụng localhost")
+//	    conn := database.Connect("localhost")
+//	}
+func (m *manager) GetString(key string) (string, bool) {
+	if !m.Viper.IsSet(key) {
+		return "", false
 	}
-
-	return "", false
+	return m.Viper.GetString(key), true
 }
 
 // GetInt trả về giá trị số nguyên cho key.
-func (c *DefaultConfig) GetInt(key string) (int, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	if val, ok := c.configMap[key]; ok {
-		switch val.Type {
-		case model.TypeInt:
-			if intVal, ok := val.Value.(int); ok {
-				return intVal, true
-			}
-			if int64Val, ok := val.Value.(int64); ok {
-				return int(int64Val), true
-			}
-		case model.TypeFloat:
-			if floatVal, ok := val.Value.(float64); ok {
-				return int(floatVal), true
-			}
-		case model.TypeString:
-			if strVal, ok := val.Value.(string); ok {
-				if intVal, err := utils.ToInt(strVal); err == nil {
-					return intVal, true
-				}
-			}
-		}
+func (m *manager) GetInt(key string) (int, bool) {
+	if !m.Viper.IsSet(key) {
+		return 0, false
 	}
-
-	return 0, false
+	return m.Viper.GetInt(key), true
 }
 
 // GetBool trả về giá trị boolean cho key.
-func (c *DefaultConfig) GetBool(key string) (bool, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	if val, ok := c.configMap[key]; ok {
-		switch val.Type {
-		case model.TypeBool:
-			boolVal, _ := val.Value.(bool)
-			return boolVal, true
-		case model.TypeInt:
-			if intVal, ok := val.Value.(int); ok {
-				return intVal != 0, true
-			}
-			if int64Val, ok := val.Value.(int64); ok {
-				return int64Val != 0, true
-			}
-		case model.TypeString:
-			if strVal, ok := val.Value.(string); ok {
-				if boolVal, err := utils.ToBool(strVal); err == nil {
-					return boolVal, true
-				}
-			}
-		}
+func (m *manager) GetBool(key string) (bool, bool) {
+	if !m.Viper.IsSet(key) {
+		return false, false
 	}
-
-	return false, false
+	return m.Viper.GetBool(key), true
 }
 
 // GetFloat trả về giá trị số thực cho key.
-func (c *DefaultConfig) GetFloat(key string) (float64, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	if val, ok := c.configMap[key]; ok {
-		switch val.Type {
-		case model.TypeFloat:
-			floatVal, _ := val.Value.(float64)
-			return floatVal, true
-		case model.TypeInt:
-			if intVal, ok := val.Value.(int); ok {
-				return float64(intVal), true
-			}
-			if int64Val, ok := val.Value.(int64); ok {
-				return float64(int64Val), true
-			}
-		case model.TypeBool:
-			if boolVal, ok := val.Value.(bool); ok {
-				if boolVal {
-					return 1.0, true
-				}
-				return 0.0, true
-			}
-		case model.TypeString:
-			if strVal, ok := val.Value.(string); ok {
-				if floatVal, err := utils.ToFloat(strVal); err == nil {
-					return floatVal, true
-				}
-			}
-		}
+func (m *manager) GetFloat(key string) (float64, bool) {
+	if !m.Viper.IsSet(key) {
+		return 0, false
 	}
+	return m.Viper.GetFloat64(key), true
+}
 
-	return 0, false
+// GetDuration returns the duration value for a key.
+func (m *manager) GetDuration(key string) (time.Duration, bool) {
+	if !m.Viper.IsSet(key) {
+		return 0, false
+	}
+	return m.Viper.GetDuration(key), true
+}
+
+// GetTime returns the time.Time value for a key.
+func (m *manager) GetTime(key string) (time.Time, bool) {
+	if !m.Viper.IsSet(key) {
+		return time.Time{}, false
+	}
+	return m.Viper.GetTime(key), true
 }
 
 // GetSlice trả về giá trị slice cho key.
-func (c *DefaultConfig) GetSlice(key string) ([]interface{}, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	if val, ok := c.configMap[key]; ok && val.Type == model.TypeSlice {
-		if slice, ok := val.Value.([]interface{}); ok {
-			return slice, true
-		}
+func (m *manager) GetSlice(key string) ([]interface{}, bool) {
+	if !m.Viper.IsSet(key) {
+		return nil, false
 	}
-
+	value := m.Viper.Get(key)
+	if slice, ok := value.([]interface{}); ok {
+		return slice, true
+	}
 	return nil, false
+}
+
+// GetStringSlice returns string slice value for a key.
+func (m *manager) GetStringSlice(key string) ([]string, bool) {
+	if !m.Viper.IsSet(key) {
+		return nil, false
+	}
+	return m.Viper.GetStringSlice(key), true
+}
+
+// GetIntSlice returns int slice value for a key.
+func (m *manager) GetIntSlice(key string) ([]int, bool) {
+	if !m.Viper.IsSet(key) {
+		return nil, false
+	}
+	return m.Viper.GetIntSlice(key), true
 }
 
 // GetMap trả về giá trị map cho key.
-func (c *DefaultConfig) GetMap(key string) (map[string]interface{}, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+func (m *manager) GetMap(key string) (map[string]interface{}, bool) {
+	if !m.Viper.IsSet(key) {
+		return nil, false
+	}
 
-	if val, ok := c.configMap[key]; ok && val.Type == model.TypeMap {
-		if m, ok := val.Value.(map[string]interface{}); ok {
-			return m, true
+	// Kiểm tra xem key có phải là một map không
+	val := m.Viper.Get(key)
+	if mapVal, ok := val.(map[string]interface{}); ok {
+		return mapVal, true
+	}
+
+	// Thử thu thập tất cả các subkey để tạo map
+	result := make(map[string]interface{})
+	prefix := key + "."
+	subKeys := m.Viper.AllKeys()
+
+	hasSubKeys := false
+	for _, subKey := range subKeys {
+		if strings.HasPrefix(subKey, prefix) {
+			shortKey := strings.TrimPrefix(subKey, prefix)
+			result[shortKey] = m.Viper.Get(subKey)
+			hasSubKeys = true
 		}
+	}
+
+	if hasSubKeys {
+		return result, true
 	}
 
 	return nil, false
 }
 
+// GetStringMap returns the value associated with the key as a map of interfaces.
+func (m *manager) GetStringMap(key string) (map[string]interface{}, bool) {
+	if !m.Viper.IsSet(key) {
+		return nil, false
+	}
+	return m.Viper.GetStringMap(key), true
+}
+
+// GetStringMapString returns the value associated with the key as a map of strings.
+func (m *manager) GetStringMapString(key string) (map[string]string, bool) {
+	if !m.Viper.IsSet(key) {
+		return nil, false
+	}
+	return m.Viper.GetStringMapString(key), true
+}
+
+// GetStringMapStringSlice returns the value associated with the key as a map to a slice of strings.
+func (m *manager) GetStringMapStringSlice(key string) (map[string][]string, bool) {
+	if !m.Viper.IsSet(key) {
+		return nil, false
+	}
+	return m.Viper.GetStringMapStringSlice(key), true
+}
+
 // Set cập nhật hoặc thêm một giá trị vào cấu hình.
-func (c *DefaultConfig) Set(key string, value interface{}) error {
-	if key == "" && !c.opts.HandleEmptyKey {
-		return fmt.Errorf("%w: key cannot be empty", ErrInvalidKey)
+func (m *manager) Set(key string, value interface{}) error {
+	if key == "" {
+		return fmt.Errorf("key cannot be empty")
 	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	valueType := model.TypeUnknown
-
-	// Xác định kiểu dữ liệu của value
-	switch value.(type) {
-	case string:
-		valueType = model.TypeString
-	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
-		valueType = model.TypeInt
-	case float32, float64:
-		valueType = model.TypeFloat
-	case bool:
-		valueType = model.TypeBool
-	case []interface{}, []string, []int:
-		valueType = model.TypeSlice
-	case map[string]interface{}:
-		valueType = model.TypeMap
-	case nil:
-		valueType = model.TypeNil
-	default:
-		// Kiểm tra kiểu phức tạp hơn
-		rv := reflect.ValueOf(value)
-		switch rv.Kind() {
-		case reflect.Slice, reflect.Array:
-			valueType = model.TypeSlice
-		case reflect.Map:
-			valueType = model.TypeMap
-		default:
-			// Chuyển đổi thành string nếu không xác định được kiểu
-			value = fmt.Sprintf("%v", value)
-			valueType = model.TypeString
-		}
-	}
-
-	// Cập nhật ConfigMap
-	c.configMap[key] = model.ConfigValue{
-		Value: value,
-		Type:  valueType,
-	}
-
+	m.Viper.Set(key, value)
 	return nil
+}
+
+// SetDefault sets default value for a key.
+func (m *manager) SetDefault(key string, value interface{}) {
+	m.Viper.SetDefault(key, value)
 }
 
 // Has kiểm tra xem key có tồn tại hay không.
-func (c *DefaultConfig) Has(key string) bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+//
+// Phương thức này xác định liệu một khóa cấu hình có được thiết lập hay không,
+// bất kể nguồn cấu hình nào (file, biến môi trường, giá trị mặc định, v.v.).
+//
+// Params:
+//   - key: string - Khóa cấu hình cần kiểm tra
+//
+// Returns:
+//   - bool: true nếu key tồn tại, ngược lại là false
+//
+// Example:
+//
+//	if cfg.Has("database.credentials") {
+//	    // Sử dụng thông tin xác thực từ cấu hình
+//	    username, _ := cfg.GetString("database.credentials.username")
+//	    password, _ := cfg.GetString("database.credentials.password")
+//	    db.Connect(username, password)
+//	} else {
+//	    // Sử dụng xác thực mặc định
+//	    db.ConnectWithDefaults()
+//	}
+func (m *manager) Has(key string) bool {
+	return m.Viper.IsSet(key)
+}
 
-	_, ok := c.configMap[key]
-	return ok
+// AllSettings trả về tất cả cấu hình dưới dạng map.
+//
+// Phương thức này trả về tất cả các thiết lập cấu hình hiện tại dưới dạng map lồng nhau,
+// phản ánh cấu trúc phân cấp của cấu hình.
+//
+// Returns:
+//   - map[string]interface{}: Map lồng nhau chứa tất cả cấu hình hiện tại
+//
+// Example:
+//
+//	settings := cfg.AllSettings()
+//
+//	// In ra cấu hình dưới dạng JSON có định dạng
+//	jsonData, _ := json.MarshalIndent(settings, "", "  ")
+//	fmt.Println(string(jsonData))
+//
+//	// Truy cập trực tiếp vào cấu hình qua map
+//	if app, ok := settings["app"].(map[string]interface{}); ok {
+//	    fmt.Println("App name:", app["name"])
+//	}
+func (m *manager) AllSettings() map[string]interface{} {
+	return m.Viper.AllSettings()
+}
+
+// AllKeys trả về tất cả các khóa đang giữ giá trị, bất kể chúng được thiết lập ở đâu.
+//
+// Phương thức này trả về danh sách tất cả các khóa cấu hình hiện có trong hệ thống,
+// bao gồm các khóa từ file cấu hình, biến môi trường, giá trị mặc định, v.v.
+// Các khóa được trả về dưới dạng đường dẫn phẳng (flat path) sử dụng dấu chấm làm dấu phân cách.
+//
+// Returns:
+//   - []string: Slice chứa tất cả các khóa có giá trị
+//
+// Example:
+//
+//	keys := cfg.AllKeys()
+//	fmt.Println("Tất cả các khóa cấu hình:")
+//	for _, key := range keys {
+//	    value, _ := cfg.Get(key)
+//	    fmt.Printf("- %s = %v\n", key, value)
+//	}
+//
+//	// Kiểm tra xem có khóa nào liên quan đến database không
+//	dbKeys := []string{}
+//	for _, key := range keys {
+//	    if strings.HasPrefix(key, "database.") {
+//	        dbKeys = append(dbKeys, key)
+//	    }
+//	}
+//	fmt.Printf("Tìm thấy %d khóa database\n", len(dbKeys))
+func (m *manager) AllKeys() []string {
+	return m.Viper.AllKeys()
 }
 
 // Unmarshal ánh xạ cấu hình vào một struct Go.
-func (c *DefaultConfig) Unmarshal(key string, target interface{}) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	rv := reflect.ValueOf(target)
-	if rv.Kind() != reflect.Ptr || rv.IsNil() {
-		return fmt.Errorf("target must be a non-nil pointer: %w", ErrInvalidTarget)
-	}
-
-	rv = rv.Elem()
-	if rv.Kind() != reflect.Struct {
-		return fmt.Errorf("target must point to a struct: %w", ErrInvalidTarget)
-	}
-
-	var data model.ConfigMap
+//
+// Phương thức này chuyển đổi cấu hình thành một đối tượng struct Go.
+// Nếu key không rỗng, chỉ phần cấu hình tương ứng với key đó được ánh xạ.
+// Nếu key rỗng, toàn bộ cấu hình được ánh xạ vào struct.
+//
+// Params:
+//   - key: string - Prefix của cấu hình cần ánh xạ, nếu rỗng thì ánh xạ toàn bộ cấu hình
+//   - target: interface{} - Con trỏ tới struct cần ánh xạ dữ liệu vào
+//
+// Returns:
+//   - error:
+//   - nil nếu ánh xạ thành công
+//   - Lỗi nếu key không tồn tại hoặc không phải là map
+//   - Lỗi nếu không thể ánh xạ giá trị vào struct (kiểu dữ liệu không khớp)
+//
+// Example:
+//
+//	// Ánh xạ cấu hình database vào struct
+//	type DatabaseConfig struct {
+//	    Host     string   `mapstructure:"host"`
+//	    Port     int      `mapstructure:"port"`
+//	    Username string   `mapstructure:"username"`
+//	    Password string   `mapstructure:"password"`
+//	    Replicas []string `mapstructure:"replicas"`
+//	}
+//
+//	var dbConfig DatabaseConfig
+//	err := cfg.Unmarshal("database", &dbConfig)
+//	if err != nil {
+//	    log.Fatalf("Lỗi khi unmarshal cấu hình database: %v", err)
+//	}
+//
+//	fmt.Printf("Kết nối tới database: %s:%d\n", dbConfig.Host, dbConfig.Port)
+//
+//	// Ánh xạ toàn bộ cấu hình vào struct root
+//	type AppConfig struct {
+//	    AppName  string         `mapstructure:"app_name"`
+//	    Version  string         `mapstructure:"version"`
+//	    Database DatabaseConfig `mapstructure:"database"`
+//	    Cache    struct {
+//	        Enabled bool `mapstructure:"enabled"`
+//	        TTL     int  `mapstructure:"ttl"`
+//	    } `mapstructure:"cache"`
+//	}
+//
+//	var appConfig AppConfig
+//	err = cfg.Unmarshal("", &appConfig)
+//	if err != nil {
+//	    log.Fatalf("Lỗi khi unmarshal toàn bộ cấu hình: %v", err)
+//	}
+func (m *manager) Unmarshal(key string, target interface{}) error {
 	if key == "" {
-		// Sử dụng toàn bộ ConfigMap
-		data = c.configMap
-	} else {
-		// Lọc ConfigMap theo prefix
-		data = make(model.ConfigMap)
-		if val, exists := c.configMap[key]; exists {
-			data[key] = val
-		}
-
-		// Thêm tất cả key con
-		prefix := key + c.opts.Separator
-		for k, v := range c.configMap {
-			if strings.HasPrefix(k, prefix) {
-				data[k] = v
-			}
-		}
-
-		if len(data) == 0 {
-			return fmt.Errorf("key %s not found: %w", key, ErrKeyNotFound)
-		}
+		// Unmarshal toàn bộ cấu hình
+		return m.Viper.Unmarshal(target)
 	}
 
-	return c.unmarshalStruct(rv, data, key)
+	// Unmarshal một phần cấu hình với prefix
+	subV := m.Viper.Sub(key)
+	if subV == nil {
+		return fmt.Errorf("key %s not found or not a map", key)
+	}
+
+	return subV.Unmarshal(target)
 }
 
-// toSnakeCase chuyển CamelCase/PascalCase về snake_case
-func toSnakeCase(s string) string {
-	var result []rune
-	for i, r := range s {
-		if i > 0 && r >= 'A' && r <= 'Z' {
-			result = append(result, '_')
-		}
-		result = append(result, r)
-	}
-	return strings.ToLower(string(result))
+// UnmarshalKey ánh xạ một khóa cấu hình duy nhất vào một struct.
+//
+// Phương thức này khác với Unmarshal ở chỗ nó luôn yêu cầu một khóa và
+// không hỗ trợ ánh xạ toàn bộ cấu hình. UnmarshalKey thường được sử dụng khi
+// bạn muốn ánh xạ một phần cụ thể của cấu hình.
+//
+// Params:
+//   - key: string - Khóa cấu hình cần ánh xạ
+//   - target: interface{} - Con trỏ tới struct cần ánh xạ dữ liệu vào
+//
+// Returns:
+//   - error: Lỗi nếu có trong quá trình ánh xạ, nil nếu thành công
+//
+// Example:
+//
+//	// Ánh xạ cấu hình api.rate_limits vào struct RateLimits
+//	type RateLimits struct {
+//	    Enabled      bool `mapstructure:"enabled"`
+//	    MaxRequests  int  `mapstructure:"max_requests"`
+//	    PerTimeUnit  string `mapstructure:"per_time_unit"`
+//	    BurstSize    int  `mapstructure:"burst_size"`
+//	}
+//
+//	var limits RateLimits
+//	err := cfg.UnmarshalKey("api.rate_limits", &limits)
+//	if err != nil {
+//	    log.Fatalf("Không thể ánh xạ cấu hình rate limits: %v", err)
+//	}
+//
+//	if limits.Enabled {
+//	    rateLimiter := middleware.NewRateLimiter(limits.MaxRequests, limits.PerTimeUnit, limits.BurstSize)
+//	    app.Use(rateLimiter)
+//	}
+func (m *manager) UnmarshalKey(key string, target interface{}) error {
+	return m.Viper.UnmarshalKey(key, target)
 }
 
-// unmarshalStruct ánh xạ cấu hình vào một struct.
-func (c *DefaultConfig) unmarshalStruct(rv reflect.Value, data model.ConfigMap, prefix string) error {
-	rt := rv.Type()
-
-	for i := 0; i < rv.NumField(); i++ {
-		field := rt.Field(i)
-		fieldValue := rv.Field(i)
-
-		// Bỏ qua các field không export
-		if !fieldValue.CanSet() {
-			continue
-		}
-
-		// Lấy tag "config" hoặc sử dụng tên field
-		configTag := field.Tag.Get("config")
-		if configTag == "-" {
-			continue // Bỏ qua field nếu tag là "-"
-		}
-
-		fieldPath := configTag
-		if fieldPath == "" {
-			fieldPath = toSnakeCase(field.Name)
-		}
-
-		// Nếu có prefix, thêm vào path
-		if prefix != "" && fieldPath != "" {
-			fieldPath = prefix + c.opts.Separator + fieldPath
-		}
-
-		// --- Ưu tiên ánh xạ map/slice gốc nếu là struct/map/slice và không có tag config ---
-		if configTag == "" && (fieldValue.Kind() == reflect.Struct || fieldValue.Kind() == reflect.Map || fieldValue.Kind() == reflect.Slice) {
-			baseKey := toSnakeCase(field.Name)
-			if prefix != "" {
-				baseKey = prefix + c.opts.Separator + baseKey
-			}
-			if configVal, ok := data[baseKey]; ok && configVal.Type == model.TypeMap {
-				if mapData, ok := configVal.Value.(map[string]interface{}); ok {
-					// Nếu là struct, ánh xạ từng field con từ mapData
-					if fieldValue.Kind() == reflect.Struct {
-						subMap := make(model.ConfigMap)
-						for k, v := range mapData {
-							subMap[k] = model.ConfigValue{Value: v, Type: model.TypeUnknown}
-						}
-						if err := c.unmarshalStruct(fieldValue, subMap, ""); err != nil {
-							return err
-						}
-						continue
-					}
-					// Nếu là slice, lấy trường con từ mapData
-					if fieldValue.Kind() == reflect.Slice {
-						sliceField := toSnakeCase(field.Name)
-						if v, ok := mapData[sliceField]; ok {
-							if sliceData, ok := v.([]interface{}); ok {
-								if err := c.unmarshalSlice(fieldValue, sliceData, baseKey+c.opts.Separator+sliceField); err != nil {
-									return err
-								}
-								continue
-							}
-						}
-					}
-					// Nếu là map, ánh xạ tiếp
-					if fieldValue.Kind() == reflect.Map {
-						if err := c.unmarshalMap(fieldValue, mapData, baseKey); err != nil {
-							return err
-						}
-						continue
-					}
-				}
-			}
-		}
-
-		// Xử lý struct lồng nhau (fallback dot notation)
-		if fieldValue.Kind() == reflect.Struct {
-			if err := c.unmarshalStruct(fieldValue, data, fieldPath); err != nil {
-				return err
-			}
-			continue
-		}
-
-		// Xử lý slice
-		if fieldValue.Kind() == reflect.Slice {
-			if configVal, ok := data[fieldPath]; ok && configVal.Type == model.TypeSlice {
-				if err := c.unmarshalSlice(fieldValue, configVal.Value, fieldPath); err != nil {
-					return err
-				}
-			}
-			continue
-		}
-
-		// Xử lý map
-		if fieldValue.Kind() == reflect.Map {
-			if configVal, ok := data[fieldPath]; ok && configVal.Type == model.TypeMap {
-				if err := c.unmarshalMap(fieldValue, configVal.Value, fieldPath); err != nil {
-					return err
-				}
-			}
-			continue
-		}
-
-		// Xử lý kiểu dữ liệu cơ bản (string, int, bool, ...)
-		if configVal, ok := data[fieldPath]; ok {
-			if err := c.setField(fieldValue, configVal.Value, fieldPath); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
+// SetConfigFile explicitly sets the path to a config file.
+func (m *manager) SetConfigFile(path string) {
+	m.Viper.SetConfigFile(path)
 }
 
-// unmarshalSlice ánh xạ cấu hình vào một slice.
-func (c *DefaultConfig) unmarshalSlice(field reflect.Value, value interface{}, path string) error {
-	sliceValue, ok := value.([]interface{})
-	if !ok {
-		return fmt.Errorf("expected slice for %s but got %T", path, value)
-	}
-
-	sliceType := field.Type()
-	// Không cần lưu elemType vì không sử dụng, chỉ trực tiếp sử dụng sliceType
-
-	// Tạo slice mới với độ dài phù hợp
-	newSlice := reflect.MakeSlice(sliceType, len(sliceValue), len(sliceValue))
-
-	// Duyệt qua các phần tử của slice
-	for i, val := range sliceValue {
-		elemValue := newSlice.Index(i)
-
-		// Set giá trị cho phần tử
-		if err := c.setField(elemValue, val, path+c.opts.Separator+fmt.Sprint(i)); err != nil {
-			return err
-		}
-	}
-
-	// Set slice mới cho field
-	field.Set(newSlice)
-	return nil
+// SetConfigType sets the type of the configuration.
+func (m *manager) SetConfigType(configType string) {
+	m.Viper.SetConfigType(configType)
 }
 
-// unmarshalMap ánh xạ cấu hình vào một map.
-func (c *DefaultConfig) unmarshalMap(field reflect.Value, value interface{}, path string) error {
-	mapValue, ok := value.(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("expected map for %s but got %T", path, value)
-	}
-
-	mapType := field.Type()
-	keyType := mapType.Key()
-	elemType := mapType.Elem()
-
-	// Kiểm tra kiểu key của map (chỉ hỗ trợ string)
-	if keyType.Kind() != reflect.String {
-		return fmt.Errorf("map key must be string for %s", path)
-	}
-
-	// Tạo map mới
-	newMap := reflect.MakeMap(mapType)
-
-	// Duyệt qua các phần tử của map
-	for k, v := range mapValue {
-		// Tạo key và value
-		keyValue := reflect.ValueOf(k)
-		elemValue := reflect.New(elemType).Elem()
-
-		// Set giá trị cho phần tử
-		if err := c.setField(elemValue, v, path+c.opts.Separator+k); err != nil {
-			return err
-		}
-
-		// Thêm vào map
-		newMap.SetMapIndex(keyValue, elemValue)
-	}
-
-	// Set map mới cho field
-	field.Set(newMap)
-	return nil
+// SetConfigName sets name for the config file.
+func (m *manager) SetConfigName(name string) {
+	m.Viper.SetConfigName(name)
 }
 
-// setField set giá trị cho một field.
-func (c *DefaultConfig) setField(field reflect.Value, value interface{}, path string) error {
-	if !field.CanSet() {
-		return nil
-	}
+// AddConfigPath adds a path for Viper to search for the config file in.
+func (m *manager) AddConfigPath(path string) {
+	m.Viper.AddConfigPath(path)
+}
 
-	// Xử lý nil
-	if value == nil {
-		switch field.Kind() {
-		case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice:
-			field.Set(reflect.Zero(field.Type()))
-			return nil
-		default:
-			return nil
-		}
-	}
+// ReadInConfig will discover and load the configuration file from disk
+// and key/value stores, searching in one of the defined paths.
+func (m *manager) ReadInConfig() error {
+	return m.Viper.ReadInConfig()
+}
 
-	// Xử lý theo kiểu field
-	switch field.Kind() {
-	case reflect.String:
-		str, err := utils.ToString(value)
-		if err != nil {
-			return fmt.Errorf("cannot convert %v to string for %s: %w", value, path, err)
-		}
-		field.SetString(str)
+// MergeInConfig merges a new config file with the current configuration.
+func (m *manager) MergeInConfig() error {
+	return m.Viper.MergeInConfig()
+}
 
-	case reflect.Bool:
-		b, err := utils.ToBool(value)
-		if err != nil {
-			return fmt.Errorf("cannot convert %v to bool for %s: %w", value, path, err)
-		}
-		field.SetBool(b)
+// WriteConfig writes the current configuration to a file.
+func (m *manager) WriteConfig() error {
+	return m.Viper.WriteConfig()
+}
 
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		i, err := utils.ToInt(value)
-		if err != nil {
-			return fmt.Errorf("cannot convert %v to int for %s: %w", value, path, err)
-		}
-		field.SetInt(int64(i))
+// SafeWriteConfig writes the current configuration to file only if
+// the file doesn't exist.
+func (m *manager) SafeWriteConfig() error {
+	return m.Viper.SafeWriteConfig()
+}
 
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		i, err := utils.ToInt(value)
-		if err != nil || i < 0 {
-			return fmt.Errorf("cannot convert %v to uint for %s: %w", value, path, err)
-		}
-		field.SetUint(uint64(i))
+// WriteConfigAs writes current configuration to a file with specified name.
+func (m *manager) WriteConfigAs(filename string) error {
+	return m.Viper.WriteConfigAs(filename)
+}
 
-	case reflect.Float32, reflect.Float64:
-		f, err := utils.ToFloat(value)
-		if err != nil {
-			return fmt.Errorf("cannot convert %v to float for %s: %w", value, path, err)
-		}
-		field.SetFloat(f)
+// SafeWriteConfigAs writes the current configuration to file with specified
+// name only if the file doesn't exist.
+func (m *manager) SafeWriteConfigAs(filename string) error {
+	return m.Viper.SafeWriteConfigAs(filename)
+}
 
-	case reflect.Interface:
-		field.Set(reflect.ValueOf(value))
+// WatchConfig watches the config file and reloads it when it changes.
+func (m *manager) WatchConfig() {
+	m.Viper.WatchConfig()
+}
 
-	default:
-		return fmt.Errorf("unsupported field type %s for %s", field.Type(), path)
-	}
+// OnConfigChange sets the callback to run when config changes.
+func (m *manager) OnConfigChange(callback func(event fsnotify.Event)) {
+	m.Viper.OnConfigChange(callback)
+}
 
-	return nil
+// SetEnvPrefix sets a prefix that ENV variables will use.
+func (m *manager) SetEnvPrefix(prefix string) {
+	m.Viper.SetEnvPrefix(prefix)
+}
+
+// AutomaticEnv enables automatic ENV variable support.
+func (m *manager) AutomaticEnv() {
+	m.Viper.AutomaticEnv()
+}
+
+// BindEnv binds a Viper key to a ENV variable.
+func (m *manager) BindEnv(input ...string) error {
+	return m.Viper.BindEnv(input...)
+}
+
+// MergeConfig merges a new config with the current config.
+func (m *manager) MergeConfig(in io.Reader) error {
+	return m.Viper.MergeConfig(in)
 }

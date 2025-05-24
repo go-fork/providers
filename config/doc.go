@@ -1,16 +1,80 @@
-// Package config cung cấp giải pháp quản lý cấu hình (configuration) hiện đại, linh hoạt
-// và mở rộng cho ứng dụng Go.
+// Package config là thư viện quản lý cấu hình (configuration) hiện đại, linh hoạt
+// và mở rộng cho ứng dụng Go, dựa trên nền tảng thư viện Viper.
 //
-// Tính năng nổi bật:
-
+// # Giới thiệu
 //
-// Kiến trúc và cách hoạt động:
-
+// Package config cung cấp wrapper cho thư viện Viper nổi tiếng, đồng thời mở rộng tính năng
+// và chuẩn hóa API để dễ dàng tích hợp vào các ứng dụng thông qua Dependency Injection.
+// Thư viện này thiết kế nhằm tối ưu quy trình quản lý cấu hình, đảm bảo tính nhất quán
+// và linh hoạt cho các ứng dụng Go hiện đại.
 //
-// Cấu trúc package:
-
+// # Đối tượng chính
 //
-// Ví dụ sử dụng cơ bản:
-
-// Gói này giúp centralize, validate và truy xuất configuration hiệu quả, an toàn, phù hợp cho mọi ứng dụng Go hiện đại.
+//   - Manager: Interface chính để tương tác với hệ thống cấu hình, cung cấp các phương thức
+//     để truy xuất và quản lý cấu hình, đồng thời bổ sung các tiện ích so với Viper gốc.
+//
+//   - ServiceProvider: Implementation của di.ServiceProvider để tích hợp với DI container,
+//     cho phép đăng ký và cấu hình tự động cho Manager.
+//
+// # Tính năng nổi bật
+//
+// - Hỗ trợ đa dạng định dạng cấu hình: YAML, JSON, TOML, HCL, INI, properties, dotenv
+// - Tự động đọc từ biến môi trường (Environment Variables)
+// - Hot reload: tự động cập nhật khi file cấu hình thay đổi
+// - Phân cấp cấu hình với hỗ trợ đầy đủ cho dot notation (ví dụ: "database.host")
+// - Kiểu dữ liệu phong phú với hỗ trợ unmarshalling vào struct
+// - Cấu hình mặc định và override thông qua nhiều nguồn
+// - API đồng nhất, safe type với pattern return value, ok cho mọi kiểu dữ liệu
+// - Tích hợp với DI container thông qua ServiceProvider
+//
+// # Kiến trúc và cách hoạt động
+//
+//   - Sử dụng mô hình composition thông qua embedded struct để kế thừa tính năng của Viper
+//   - Interface Manager định nghĩa API chuẩn cho việc truy xuất và quản lý cấu hình
+//   - manager struct cài đặt interface Manager bằng cách nhúng *viper.Viper
+//   - Các phương thức của Manager đều được bổ sung kiểm tra tồn tại (IsSet) trước khi truy xuất,
+//     trả về giá trị mặc định phù hợp và boolean cho biết key có tồn tại không
+//
+// # Ví dụ sử dụng cơ bản
+//
+//	// Đăng ký với DI container
+//	app := di.New()
+//	app.Register(config.NewServiceProvider())
+//
+//	// Lấy config từ container
+//	container := app.Container()
+//	cfg := container.Get("config").(config.Manager)
+//
+//	// Cấu hình và đọc file
+//	cfg.SetConfigFile("config.yaml")
+//	err := cfg.ReadInConfig()
+//	if err != nil {
+//	    log.Fatalf("Không thể đọc file cấu hình: %v", err)
+//	}
+//
+//	// Sử dụng cấu hình với kiểm tra tồn tại
+//	if name, ok := cfg.GetString("app.name"); ok {
+//	    fmt.Printf("Tên ứng dụng: %s\n", name)
+//	}
+//
+//	if port, ok := cfg.GetInt("app.port"); ok {
+//	    fmt.Printf("Cổng: %d\n", port)
+//	}
+//
+//	// Unmarshalling vào struct
+//	type DatabaseConfig struct {
+//	    Host     string
+//	    Port     int
+//	    Username string
+//	    Password string
+//	}
+//
+//	var dbConfig DatabaseConfig
+//	err = cfg.Unmarshal("database", &dbConfig)
+//	if err != nil {
+//	    log.Fatalf("Lỗi unmarshalling cấu hình database: %v", err)
+//	}
+//
+// Package này giúp nhất quán hóa quản lý cấu hình trong ứng dụng Go, tận dụng
+// sức mạnh của Viper và bổ sung các tính năng hữu ích cho ứng dụng hiện đại.
 package config
