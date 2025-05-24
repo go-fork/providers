@@ -173,12 +173,12 @@ type Manager interface {
 	Close() error
 }
 
-// DefaultManager là implementation mặc định của Manager.
+// manager là implementation mặc định của Manager.
 //
-// DefaultManager quản lý nhiều driver cache thông qua một map driver và cung cấp
+// manager quản lý nhiều driver cache thông qua một map driver và cung cấp
 // cơ chế để thực hiện các thao tác cache qua driver mặc định. Nó đảm bảo thread-safety
 // thông qua RWMutex và cung cấp các phương thức tiện ích để tương tác với nhiều driver.
-type DefaultManager struct {
+type manager struct {
 	drivers       map[string]driver.Driver // Map chứa tất cả các driver đã đăng ký
 	defaultDriver string                   // Tên của driver mặc định
 	mu            sync.RWMutex             // Mutex cho các thao tác thread-safe
@@ -191,7 +191,7 @@ type DefaultManager struct {
 // Returns:
 //   - Manager: Đối tượng Manager mới được khởi tạo
 func NewManager() Manager {
-	return &DefaultManager{
+	return &manager{
 		drivers: make(map[string]driver.Driver),
 	}
 }
@@ -206,7 +206,7 @@ func NewManager() Manager {
 // Returns:
 //   - interface{}: Giá trị được lưu trong cache (nil nếu không tìm thấy)
 //   - bool: true nếu tìm thấy key và chưa hết hạn, false nếu ngược lại
-func (m *DefaultManager) Get(key string) (interface{}, bool) {
+func (m *manager) Get(key string) (interface{}, bool) {
 	driver, err := m.getDefaultDriver()
 	if err != nil {
 		return nil, false
@@ -225,7 +225,7 @@ func (m *DefaultManager) Get(key string) (interface{}, bool) {
 //
 // Returns:
 //   - error: Lỗi nếu có trong quá trình lưu trữ hoặc driver mặc định không được cấu hình
-func (m *DefaultManager) Set(key string, value interface{}, ttl time.Duration) error {
+func (m *manager) Set(key string, value interface{}, ttl time.Duration) error {
 	driver, err := m.getDefaultDriver()
 	if err != nil {
 		return err
@@ -242,7 +242,7 @@ func (m *DefaultManager) Set(key string, value interface{}, ttl time.Duration) e
 //
 // Returns:
 //   - bool: true nếu key tồn tại và chưa hết hạn, false nếu ngược lại
-func (m *DefaultManager) Has(key string) bool {
+func (m *manager) Has(key string) bool {
 	driver, err := m.getDefaultDriver()
 	if err != nil {
 		return false
@@ -259,7 +259,7 @@ func (m *DefaultManager) Has(key string) bool {
 //
 // Returns:
 //   - error: Lỗi nếu có trong quá trình xóa hoặc driver mặc định không được cấu hình
-func (m *DefaultManager) Delete(key string) error {
+func (m *manager) Delete(key string) error {
 	driver, err := m.getDefaultDriver()
 	if err != nil {
 		return err
@@ -273,7 +273,7 @@ func (m *DefaultManager) Delete(key string) error {
 //
 // Returns:
 //   - error: Lỗi nếu có trong quá trình xóa hoặc driver mặc định không được cấu hình
-func (m *DefaultManager) Flush() error {
+func (m *manager) Flush() error {
 	driver, err := m.getDefaultDriver()
 	if err != nil {
 		return err
@@ -291,7 +291,7 @@ func (m *DefaultManager) Flush() error {
 // Returns:
 //   - map[string]interface{}: Map chứa các key tìm thấy và giá trị tương ứng
 //   - []string: Danh sách các key không tìm thấy hoặc đã hết hạn
-func (m *DefaultManager) GetMultiple(keys []string) (map[string]interface{}, []string) {
+func (m *manager) GetMultiple(keys []string) (map[string]interface{}, []string) {
 	driver, err := m.getDefaultDriver()
 	if err != nil {
 		return make(map[string]interface{}), keys
@@ -310,7 +310,7 @@ func (m *DefaultManager) GetMultiple(keys []string) (map[string]interface{}, []s
 //
 // Returns:
 //   - error: Lỗi nếu có trong quá trình lưu trữ hoặc driver mặc định không được cấu hình
-func (m *DefaultManager) SetMultiple(values map[string]interface{}, ttl time.Duration) error {
+func (m *manager) SetMultiple(values map[string]interface{}, ttl time.Duration) error {
 	driver, err := m.getDefaultDriver()
 	if err != nil {
 		return err
@@ -327,7 +327,7 @@ func (m *DefaultManager) SetMultiple(values map[string]interface{}, ttl time.Dur
 //
 // Returns:
 //   - error: Lỗi nếu có trong quá trình xóa hoặc driver mặc định không được cấu hình
-func (m *DefaultManager) DeleteMultiple(keys []string) error {
+func (m *manager) DeleteMultiple(keys []string) error {
 	driver, err := m.getDefaultDriver()
 	if err != nil {
 		return err
@@ -349,7 +349,7 @@ func (m *DefaultManager) DeleteMultiple(keys []string) error {
 // Returns:
 //   - interface{}: Giá trị từ cache hoặc từ callback
 //   - error: Lỗi nếu có trong quá trình thực hiện, từ callback, hoặc driver mặc định không được cấu hình
-func (m *DefaultManager) Remember(key string, ttl time.Duration, callback func() (interface{}, error)) (interface{}, error) {
+func (m *manager) Remember(key string, ttl time.Duration, callback func() (interface{}, error)) (interface{}, error) {
 	driver, err := m.getDefaultDriver()
 	if err != nil {
 		return nil, err
@@ -365,7 +365,7 @@ func (m *DefaultManager) Remember(key string, ttl time.Duration, callback func()
 // Params:
 //   - name: Tên định danh cho driver
 //   - driver: Đối tượng driver cần thêm vào
-func (m *DefaultManager) AddDriver(name string, driver driver.Driver) {
+func (m *manager) AddDriver(name string, driver driver.Driver) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -384,7 +384,7 @@ func (m *DefaultManager) AddDriver(name string, driver driver.Driver) {
 //
 // Params:
 //   - name: Tên của driver cần đặt làm mặc định
-func (m *DefaultManager) SetDefaultDriver(name string) {
+func (m *manager) SetDefaultDriver(name string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -403,7 +403,7 @@ func (m *DefaultManager) SetDefaultDriver(name string) {
 // Returns:
 //   - driver.Driver: Đối tượng driver được yêu cầu
 //   - error: Lỗi nếu driver không tồn tại
-func (m *DefaultManager) Driver(name string) (driver.Driver, error) {
+func (m *manager) Driver(name string) (driver.Driver, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -421,7 +421,7 @@ func (m *DefaultManager) Driver(name string) (driver.Driver, error) {
 //
 // Returns:
 //   - map[string]map[string]interface{}: Map chứa thông tin thống kê của từng driver, với key là tên driver
-func (m *DefaultManager) Stats() map[string]map[string]interface{} {
+func (m *manager) Stats() map[string]map[string]interface{} {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -438,7 +438,7 @@ func (m *DefaultManager) Stats() map[string]map[string]interface{} {
 //
 // Returns:
 //   - error: Lỗi nếu có trong quá trình đóng bất kỳ driver nào
-func (m *DefaultManager) Close() error {
+func (m *manager) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -458,7 +458,7 @@ func (m *DefaultManager) Close() error {
 // Returns:
 //   - driver.Driver: Đối tượng driver mặc định
 //   - error: Lỗi nếu không có driver mặc định hoặc driver mặc định không tồn tại
-func (m *DefaultManager) getDefaultDriver() (driver.Driver, error) {
+func (m *manager) getDefaultDriver() (driver.Driver, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
