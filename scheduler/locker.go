@@ -73,6 +73,11 @@ func NewRedisLocker(client *redis.Client, opts ...RedisLockerOptions) (gocron.Lo
 	// Nếu có tùy chọn được cung cấp, sử dụng chúng
 	if len(opts) > 0 {
 		options = opts[0]
+
+		// Validate các giá trị options
+		if err := validateRedisLockerOptions(options); err != nil {
+			return nil, err
+		}
 	}
 
 	// Kiểm tra kết nối đến Redis
@@ -153,7 +158,10 @@ func (r *redisLock) startRenewLoop() {
 			return
 		case <-ticker.C:
 			// Gia hạn khóa bằng cách đặt thời gian hết hạn mới
-			err := r.locker.client.Expire(context.Background(), fullKey, r.locker.options.LockDuration).Err()
+			// Sử dụng context với timeout để tránh block vô hạn
+			ctx, cancel := context.WithTimeout(r.renewContext, 5*time.Second)
+			err := r.locker.client.Expire(ctx, fullKey, r.locker.options.LockDuration).Err()
+			cancel()
 			if err != nil {
 				// Log lỗi nếu cần thiết, nhưng không làm gián đoạn vòng lặp
 				continue
@@ -174,6 +182,23 @@ func (r *redisLock) Unlock(ctx context.Context) error {
 	return r.locker.client.Del(ctx, fullKey).Err()
 }
 
+// validateRedisLockerOptions kiểm tra tính hợp lệ của các tùy chọn Redis Locker.
+func validateRedisLockerOptions(options RedisLockerOptions) error {
+	if options.LockDuration <= 0 {
+		return ErrInvalidLockDuration
+	}
+	if options.MaxRetries < 0 {
+		return ErrInvalidMaxRetries
+	}
+	if options.RetryDelay < 0 {
+		return ErrInvalidRetryDelay
+	}
+	if options.KeyPrefix == "" {
+		return ErrInvalidKeyPrefix
+	}
+	return nil
+}
+
 // Error constants
 var (
 	// ErrRedisClientNil được trả về khi Redis client nil.
@@ -184,4 +209,16 @@ var (
 
 	// ErrFailedToAcquireLock được trả về khi không thể lấy lock sau số lần thử tối đa.
 	ErrFailedToAcquireLock = errors.New("scheduler: failed to acquire lock after maximum retries")
+
+	// ErrInvalidLockDuration được trả về khi LockDuration không hợp lệ.
+	ErrInvalidLockDuration = errors.New("scheduler: invalid lock duration")
+
+	// ErrInvalidMaxRetries được trả về khi MaxRetries không hợp lệ.
+	ErrInvalidMaxRetries = errors.New("scheduler: invalid max retries")
+
+	// ErrInvalidRetryDelay được trả về khi RetryDelay không hợp lệ.
+	ErrInvalidRetryDelay = errors.New("scheduler: invalid retry delay")
+
+	// ErrInvalidKeyPrefix được trả về khi KeyPrefix không hợp lệ.
+	ErrInvalidKeyPrefix = errors.New("scheduler: invalid key prefix")
 )

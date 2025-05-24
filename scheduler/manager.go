@@ -17,6 +17,10 @@ type Manager interface {
 	// Trả về Manager để hỗ trợ fluent interface.
 	Every(interval interface{}) Manager
 
+	// Second chỉ định đơn vị thời gian là giây (đơn lẻ).
+	// Trả về Manager để hỗ trợ fluent interface.
+	Second() Manager
+
 	// Seconds chỉ định đơn vị thời gian là giây.
 	// Trả về Manager để hỗ trợ fluent interface.
 	Seconds() Manager
@@ -88,14 +92,17 @@ type Manager interface {
 	// Stop dừng scheduler.
 	Stop()
 
+	// IsRunning kiểm tra xem scheduler có đang chạy không.
+	IsRunning() bool
+
 	// Clear xóa tất cả các công việc đã đăng ký.
 	Clear()
 
 	// GetScheduler trả về đối tượng scheduler gốc của gocron.
 	GetScheduler() *gocron.Scheduler
 
-	// RegisterEventListener đăng ký listener cho các sự kiện.
-	RegisterEventListener(eventListener gocron.EventListener)
+	// RegisterEventListeners đăng ký các listener cho các sự kiện.
+	RegisterEventListeners(eventListeners ...gocron.EventListener)
 }
 
 // manager triển khai interface Manager bằng cách nhúng gocron.Scheduler.
@@ -114,6 +121,12 @@ func NewScheduler() Manager {
 // Every tạo một công việc mới với khoảng thời gian được chỉ định.
 func (m *manager) Every(interval interface{}) Manager {
 	m.Scheduler.Every(interval)
+	return m
+}
+
+// Second chỉ định đơn vị thời gian là giây (đơn lẻ).
+func (m *manager) Second() Manager {
+	m.Scheduler.Second()
 	return m
 }
 
@@ -240,7 +253,12 @@ func (m *manager) WithDistributedLocker(locker gocron.Locker) Manager {
 	return m
 }
 
-// RegisterEventListener đăng ký listener cho các sự kiện.
-func (m *manager) RegisterEventListener(eventListener gocron.EventListener) {
-	m.Scheduler.RegisterEventListeners(eventListener)
+// RegisterEventListeners đăng ký các listener cho các sự kiện.
+func (m *manager) RegisterEventListeners(eventListeners ...gocron.EventListener) {
+	m.Scheduler.RegisterEventListeners(eventListeners...)
+}
+
+// IsRunning kiểm tra xem scheduler có đang chạy không.
+func (m *manager) IsRunning() bool {
+	return m.Scheduler.IsRunning()
 }

@@ -86,10 +86,10 @@ func (p *ServiceProvider) Register(app interface{}) {
 		manager := NewManagerWithConfig(p.config)
 
 		// Đăng ký các thành phần chính
-		c.Instance("queue", manager)                 // Dịch vụ queue manager chung
+		c.Instance("queue", manager)                      // Dịch vụ queue manager chung
 		c.Instance("queue.client", manager.Client()) // Binding đặc biệt cho client
-		c.Instance("queue.server", manager.Server()) // Binding đặc biệt cho server
-		c.Instance("queue.manager", manager)         // Binding đặc biệt cho manager
+		c.Instance("queue.server", manager.Server())      // Binding đặc biệt cho server
+		c.Instance("queue.manager", manager)              // Binding đặc biệt cho manager
 
 		// Đăng ký các adapter và các thành phần phụ thuộc
 		if p.config.Adapter.Default == "redis" {

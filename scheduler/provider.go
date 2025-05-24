@@ -98,5 +98,11 @@ func (p *ServiceProvider) Boot(app interface{}) {
 	if !ok {
 		return // Không phải loại scheduler manager
 	}
+
+	// Kiểm tra xem scheduler đã được start chưa
+	if scheduler.IsRunning() {
+		return // Scheduler đã được start rồi
+	}
+
 	scheduler.StartAsync()
 }
