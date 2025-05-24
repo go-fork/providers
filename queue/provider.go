@@ -107,4 +107,7 @@ func (p *ServiceProvider) Register(app interface{}) {
 //   - app: interface{} - instance của ứng dụng
 func (p *ServiceProvider) Boot(app interface{}) {
 	// Không yêu cầu thiết lập bổ sung sau khi đăng ký
+	if app == nil {
+		return
+	}
 }

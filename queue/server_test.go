@@ -25,12 +25,12 @@ func TestNewServer(t *testing.T) {
 		Queues:          []string{"default", "emails", "critical"},
 	}
 
-	server := NewServer(redisClient, opts)
+	srv := NewServer(redisClient, opts)
 
-	assert.NotNil(t, server, "Server should not be nil")
-	serverImpl, ok := server.(*ServerImpl)
-	assert.True(t, ok, "Server should be of type *ServerImpl")
-	assert.Equal(t, opts.Concurrency, serverImpl.options.Concurrency)
+	assert.NotNil(t, srv, "Server should not be nil")
+	queueServer, ok := srv.(*queueServer)
+	assert.True(t, ok, "Server should be of type *queueServer")
+	assert.Equal(t, opts.Concurrency, queueServer.options.Concurrency)
 }
 
 // TestNewServerWithAdapter tests the creation of a server with a custom adapter
@@ -46,9 +46,9 @@ func TestNewServerWithAdapter(t *testing.T) {
 	server := NewServerWithAdapter(memoryAdapter, opts)
 
 	assert.NotNil(t, server, "Server should not be nil")
-	serverImpl, ok := server.(*ServerImpl)
-	assert.True(t, ok, "Server should be of type *ServerImpl")
-	assert.Equal(t, opts.Concurrency, serverImpl.options.Concurrency)
+	queueServer, ok := server.(*queueServer)
+	assert.True(t, ok, "Server should be of type *queueServer")
+	assert.Equal(t, opts.Concurrency, queueServer.options.Concurrency)
 }
 
 // TestServerRegisterHandler tests registering a single handler
@@ -60,7 +60,7 @@ func TestServerRegisterHandler(t *testing.T) {
 		DefaultQueue: "default",
 	}
 
-	server := NewServerWithAdapter(memoryAdapter, opts).(*ServerImpl)
+	server := NewServerWithAdapter(memoryAdapter, opts).(*queueServer)
 
 	// Register a handler
 	handler := func(ctx context.Context, task *Task) error {
@@ -84,7 +84,7 @@ func TestServerRegisterHandlers(t *testing.T) {
 		DefaultQueue: "default",
 	}
 
-	server := NewServerWithAdapter(memoryAdapter, opts).(*ServerImpl)
+	server := NewServerWithAdapter(memoryAdapter, opts).(*queueServer)
 
 	// Create some handlers
 	handler1 := func(ctx context.Context, task *Task) error { return nil }
@@ -115,7 +115,7 @@ func TestServerOptionsDefaults(t *testing.T) {
 	// Create server with no options specified
 	opts := ServerOptions{}
 
-	server := NewServerWithAdapter(memoryAdapter, opts).(*ServerImpl)
+	server := NewServerWithAdapter(memoryAdapter, opts).(*queueServer)
 
 	// Check that the default queue was applied
 	assert.Contains(t, server.queues, "default", "Default queue should be 'default'")
@@ -208,11 +208,37 @@ func TestServerWithCustomQueues(t *testing.T) {
 		Queues: customQueues,
 	}
 
-	server := NewServerWithAdapter(memoryAdapter, opts).(*ServerImpl)
+	server := NewServerWithAdapter(memoryAdapter, opts).(*queueServer)
 
 	// Verify the queues were set correctly
 	assert.Equal(t, len(customQueues), len(server.queues), "Server should have the correct number of queues")
 	for i, queue := range customQueues {
 		assert.Equal(t, queue, server.queues[i], "Queue name should match")
 	}
+}
+
+// TestNewServerWithUniversalClient tests server creation with a non-standard Redis client
+func TestNewServerWithUniversalClient(t *testing.T) {
+	// Create a Redis Cluster client (which is not a standard *redis.Client)
+	clusterClient := redis.NewClusterClient(&redis.ClusterOptions{
+		Addrs: []string{"localhost:6379"},
+	})
+
+	opts := ServerOptions{
+		Concurrency:     5,
+		PollingInterval: 1000,
+		DefaultQueue:    "cluster-queue",
+	}
+
+	// This should trigger the fallback code path
+	server := NewServer(clusterClient, opts)
+
+	assert.NotNil(t, server, "Server should not be nil")
+
+	// Start and stop to verify it's functional
+	err := server.Start()
+	assert.NoError(t, err, "Start should not return an error")
+
+	err = server.Stop()
+	assert.NoError(t, err, "Stop should not return an error")
 }

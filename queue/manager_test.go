@@ -185,7 +185,7 @@ func TestManagerServer(t *testing.T) {
 
 	memoryServer := memoryManager.Server()
 	assert.NotNil(t, memoryServer, "Server should not be nil")
-	assert.IsType(t, &ServerImpl{}, memoryServer, "Should return a queue server")
+	assert.IsType(t, &queueServer{}, memoryServer, "Should return a queue server")
 
 	// Test with redis adapter as default
 	redisConfig := Config{
@@ -202,5 +202,5 @@ func TestManagerServer(t *testing.T) {
 
 	redisServer := redisManager.Server()
 	assert.NotNil(t, redisServer, "Server should not be nil")
-	assert.IsType(t, &ServerImpl{}, redisServer, "Should return a queue server")
+	assert.IsType(t, &queueServer{}, redisServer, "Should return a queue server")
 }

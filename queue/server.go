@@ -57,8 +57,8 @@ type Server interface {
 	Stop() error
 }
 
-// ServerImpl triển khai interface Server.
-type ServerImpl struct {
+// queueServer triển khai interface Server.
+type queueServer struct {
 	queue           adapter.QueueAdapter
 	handlers        sync.Map
 	started         bool
@@ -95,7 +95,7 @@ func NewServer(redisClient redis.UniversalClient, opts ServerOptions) Server {
 		queues = append(queues, defaultQueue)
 	}
 
-	return &ServerImpl{
+	return &queueServer{
 		queue:           queue,
 		handlers:        sync.Map{},
 		started:         false,
@@ -121,7 +121,7 @@ func NewServerWithAdapter(adapter adapter.QueueAdapter, opts ServerOptions) Serv
 		queues = append(queues, defaultQueue)
 	}
 
-	return &ServerImpl{
+	return &queueServer{
 		queue:           adapter,
 		handlers:        sync.Map{},
 		started:         false,
@@ -134,19 +134,19 @@ func NewServerWithAdapter(adapter adapter.QueueAdapter, opts ServerOptions) Serv
 }
 
 // RegisterHandler đăng ký một handler cho một loại tác vụ.
-func (s *ServerImpl) RegisterHandler(taskName string, handler HandlerFunc) {
+func (s *queueServer) RegisterHandler(taskName string, handler HandlerFunc) {
 	s.handlers.Store(taskName, handler)
 }
 
 // RegisterHandlers đăng ký nhiều handler cùng một lúc.
-func (s *ServerImpl) RegisterHandlers(handlers map[string]HandlerFunc) {
+func (s *queueServer) RegisterHandlers(handlers map[string]HandlerFunc) {
 	for taskName, handler := range handlers {
 		s.RegisterHandler(taskName, handler)
 	}
 }
 
 // Start bắt đầu xử lý tác vụ (worker).
-func (s *ServerImpl) Start() error {
+func (s *queueServer) Start() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -163,7 +163,7 @@ func (s *ServerImpl) Start() error {
 }
 
 // Stop dừng xử lý tác vụ.
-func (s *ServerImpl) Stop() error {
+func (s *queueServer) Stop() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

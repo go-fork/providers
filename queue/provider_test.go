@@ -1,6 +1,8 @@
 package queue
 
 import (
+	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/go-fork/di"
@@ -181,14 +183,95 @@ func TestServiceProviderRegisterWithNonContainerApp(t *testing.T) {
 	// Just verify it doesn't panic
 }
 
-// TestServiceProviderBoot tests the Boot method
+// TestServiceProviderBoot tests the Boot method of ServiceProvider
 func TestServiceProviderBoot(t *testing.T) {
-	// Create a mock app
-	mockApp := new(MockApp)
-
-	// Create a provider and call Boot - should not do anything but should not error
 	provider := NewServiceProvider()
-	provider.Boot(mockApp)
 
-	// No expectations to verify - Boot is currently a no-op
+	// Test with nil app (should not panic)
+	provider.Boot(nil)
+
+	// Test with non-nil app
+	type mockApp struct{}
+	app := &mockApp{}
+	provider.Boot(app)
+}
+
+// TestServiceProviderRegisterWithConfig tests the Register method with a config manager
+func TestServiceProviderRegisterWithConfig(t *testing.T) {
+	// Create a mock config manager
+	mockConfig := &mockConfigManager{
+		data: map[string]interface{}{
+			"queue": map[string]interface{}{
+				"adapter": map[string]interface{}{
+					"default": "redis",
+					"redis": map[string]interface{}{
+						"addr": "localhost:6379",
+					},
+				},
+			},
+		},
+		hasKey: true,
+	}
+
+	// Create a mock container
+	container := di.New()
+	container.Instance("config", mockConfig)
+
+	// Create a mock app that returns our container
+	app := &mockApp{container: container}
+
+	// Create provider and register
+	provider := NewServiceProvider()
+	provider.Register(app)
+
+	// Verify registrations
+	queueManager, err := container.Make("queue")
+	assert.NoError(t, err)
+	assert.NotNil(t, queueManager)
+
+	queueClient, err := container.Make("queue.client")
+	assert.NoError(t, err)
+	assert.NotNil(t, queueClient)
+
+	queueServer, err := container.Make("queue.server")
+	assert.NoError(t, err)
+	assert.NotNil(t, queueServer)
+
+	redisClient, err := container.Make("queue.redis")
+	assert.NoError(t, err)
+	assert.NotNil(t, redisClient)
+}
+
+// mockApp is a mock implementation for testing
+type mockApp struct {
+	container *di.Container
+}
+
+func (m *mockApp) Container() *di.Container {
+	return m.container
+}
+
+// mockConfigManager is a mock implementation of config.Manager for testing
+type mockConfigManager struct {
+	data   map[string]interface{}
+	hasKey bool
+}
+
+func (m *mockConfigManager) Has(key string) bool {
+	return m.hasKey
+}
+
+func (m *mockConfigManager) UnmarshalKey(key string, target interface{}) error {
+	val, ok := m.data[key]
+	if !ok {
+		return fmt.Errorf("key not found")
+	}
+
+	// Convert the map to JSON, then unmarshal to the target
+	jsonData, err := json.Marshal(val)
+	if err != nil {
+		return err
+	}
+
+	return json.Unmarshal(jsonData, target)
 }
