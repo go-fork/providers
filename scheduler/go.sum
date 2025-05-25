@@ -12,8 +12,8 @@ github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f h1:lO4WD4F/r
 github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f/go.mod h1:cuUVRXasLTGF7a8hSLbxyZXjz+1KgoB3wDUb6vlszIc=
 github.com/go-co-op/gocron v1.37.0 h1:ZYDJGtQ4OMhTLKOKMIch+/CY70Brbb1dGdooLEhh7b0=
 github.com/go-co-op/gocron v1.37.0/go.mod h1:3L/n6BkO7ABj+TrfSVXLRzsP26zmikL4ISkLQ0O8iNY=
-github.com/go-fork/di v0.0.3 h1:Ab0QGwolKmRGdTwZsSeIrml1uclnvBzUz9ZtsmgRjq8=
-github.com/go-fork/di v0.0.3/go.mod h1:BCsy72BM5cq4NL3sRFPMDuB58Hnpg4DPpfAqU8oiZuM=
+github.com/go-fork/di v0.0.4 h1:Gs8zIBtvdcXp8/rZke4zNIcPMlnZLxnijzpJGMIek8A=
+github.com/go-fork/di v0.0.4/go.mod h1:BCsy72BM5cq4NL3sRFPMDuB58Hnpg4DPpfAqU8oiZuM=
 github.com/google/uuid v1.4.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
