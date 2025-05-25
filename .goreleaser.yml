@@ -26,12 +26,10 @@ archives:
       - config/**/*
       - log/**/*
       - mailer/**/*
-      - middleware/**/*
       - queue/**/*
       - scheduler/**/*
       - sms/**/*
       - docs/**/*
-      - examples/**/*
     format_overrides:
       - goos: windows
         format: zip
@@ -95,10 +93,8 @@ release:
     ```bash
     go get github.com/go-fork/providers/cache@{{ .Tag }}
     go get github.com/go-fork/providers/config@{{ .Tag }}
-    go get github.com/go-fork/providers/http@{{ .Tag }}
     go get github.com/go-fork/providers/log@{{ .Tag }}
     go get github.com/go-fork/providers/mailer@{{ .Tag }}
-    go get github.com/go-fork/providers/middleware@{{ .Tag }}
     go get github.com/go-fork/providers/queue@{{ .Tag }}
     go get github.com/go-fork/providers/scheduler@{{ .Tag }}
     go get github.com/go-fork/providers/sms@{{ .Tag }}
