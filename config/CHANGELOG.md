@@ -6,6 +6,10 @@
 
 * See GitHub release notes
 
+## v0.0.3 - 2025-05-25
+
+* See GitHub release notes
+
 ### Added
 - Support for secure credential storage
 - Configuration validation framework
