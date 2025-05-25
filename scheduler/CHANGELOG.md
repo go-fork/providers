@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+## v0.0.3 - 2025-05-25
+
+### Added
+
+- Tích hợp toàn bộ tính năng của thư viện gocron vào DI container của ứng dụng
+- Hỗ trợ nhiều loại lịch trình: theo khoảng thời gian, theo thời điểm cụ thể, biểu thức cron
+- Hỗ trợ chế độ singleton để tránh chạy song song cùng một task
+- Hỗ trợ distributed locking với Redis cho môi trường phân tán
+- Hỗ trợ tag để nhóm và quản lý các task
+- API fluent cho trải nghiệm lập trình dễ dàng
+--
+- Khóa Redis được tự động gia hạn sau khi đã chạy được 2/3 thời gian hết hạn
+- Việc gia hạn xảy ra trong một goroutine riêng biệt
+- Khi job hoàn thành, khóa sẽ được giải phóng
+
 ### Added
 - Task cancellation API
 - Health monitoring for scheduled tasks
