@@ -1,2 +1,4 @@
-github.com/go-fork/di v0.0.2 h1:GNJTg9t/yR0dy+MPI1Ck0uW9Ak7UdHdFYdxrY7EFtSg=
-github.com/go-fork/di v0.0.2/go.mod h1:J/n+yxWXlwAOLLF9EF/Qrz4LJhfU623Mw+mAFjYGwWg=
+github.com/go-fork/di v0.0.3 h1:Ab0QGwolKmRGdTwZsSeIrml1uclnvBzUz9ZtsmgRjq8=
+github.com/go-fork/di v0.0.3/go.mod h1:BCsy72BM5cq4NL3sRFPMDuB58Hnpg4DPpfAqU8oiZuM=
+github.com/go-fork/di v0.0.4 h1:Gs8zIBtvdcXp8/rZke4zNIcPMlnZLxnijzpJGMIek8A=
+github.com/go-fork/di v0.0.4/go.mod h1:BCsy72BM5cq4NL3sRFPMDuB58Hnpg4DPpfAqU8oiZuM=

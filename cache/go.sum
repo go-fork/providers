@@ -10,8 +10,8 @@ github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f h1:lO4WD4F/r
 github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f/go.mod h1:cuUVRXasLTGF7a8hSLbxyZXjz+1KgoB3wDUb6vlszIc=
 github.com/fsnotify/fsnotify v1.4.9 h1:hsms1Qyu0jgnwNXIxa+/V/PDsU6CfLf6CNO8H7IWoS4=
 github.com/fsnotify/fsnotify v1.4.9/go.mod h1:znqG4EE+3YCdAaPaxE2ZRY/06pZUdp0tY4IgpuI1SZQ=
-github.com/go-fork/di v0.0.3 h1:Ab0QGwolKmRGdTwZsSeIrml1uclnvBzUz9ZtsmgRjq8=
-github.com/go-fork/di v0.0.3/go.mod h1:BCsy72BM5cq4NL3sRFPMDuB58Hnpg4DPpfAqU8oiZuM=
+github.com/go-fork/di v0.0.4 h1:Gs8zIBtvdcXp8/rZke4zNIcPMlnZLxnijzpJGMIek8A=
+github.com/go-fork/di v0.0.4/go.mod h1:BCsy72BM5cq4NL3sRFPMDuB58Hnpg4DPpfAqU8oiZuM=
 github.com/go-redis/redismock/v9 v9.2.0 h1:ZrMYQeKPECZPjOj5u9eyOjg8Nnb0BS9lkVIZ6IpsKLw=
 github.com/go-redis/redismock/v9 v9.2.0/go.mod h1:18KHfGDK4Y6c2R0H38EUGWAdc7ZQS9gfYxc94k7rWT0=
 github.com/golang/snappy v1.0.0 h1:Oy607GVXHs7RtbggtPBnr2RmDArIsAefDwvrdWvRhGs=

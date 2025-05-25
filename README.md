@@ -145,12 +145,7 @@ func main() {
 
 | Provider | Phiên bản tiếp theo | Kế hoạch phát triển |
 |----------|---------------------|---------------------|
-| cache    | v0.0.3              | Thêm Memcached driver, cải thiện hiệu suất |
-| config   | v0.0.4              | Hỗ trợ HCL format, cải thiện remote config |
-| mailer   | v0.0.4              | Thêm queue integration, HTML template cải tiến |
-| queue    | v0.0.4              | Kafka adapter, DLQ (Dead Letter Queue) |
-| scheduler| v0.0.4              | Cải thiện distributed scheduling |
-| sms      | v0.0.3              | Tích hợp nhiều nhà cung cấp SMS mới |
+| sms      | v0.0.1              | Tích hợp nhiều nhà cung cấp SMS mới |
 
 ## Chi tiết về các Provider
 

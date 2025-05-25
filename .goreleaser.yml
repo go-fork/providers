@@ -24,7 +24,6 @@ archives:
       - CHANGELOG.md
       - cache/**/*
       - config/**/*
-      - http/**/*
       - log/**/*
       - mailer/**/*
       - middleware/**/*
