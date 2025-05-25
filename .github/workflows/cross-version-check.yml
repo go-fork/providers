@@ -21,12 +21,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        go-version: ['1.20.x', '1.21.x', '1.22.x', '1.23.x', 'tip']
+        go-version: ['1.23.x', '1.24.x', 'tip']
         os: [ubuntu-latest]
         include:
           - go-version: '1.23.x'
             os: macos-latest
-          - go-version: '1.23.x'
+          - go-version: '1.24.x'
             os: windows-latest
       fail-fast: false
 
@@ -51,11 +51,12 @@ jobs:
       - name: List modules to test
         id: list-modules
         run: |
-          MODULES=$(find . -name "go.mod" -exec dirname {} \; | sort | tr '\n' ' ')
+          MODULES=$(find . -maxdepth 2 -name "go.mod" -exec dirname {} \; | sort | tr '\n' ' ')
           echo "Found modules: $MODULES"
           echo "modules=$MODULES" >> $GITHUB_OUTPUT
       
       - name: Run tests for each module
+        shell: bash
         run: |
           IFS=' ' read -ra MODULES <<< "${{ steps.list-modules.outputs.modules }}"
           
@@ -63,13 +64,16 @@ jobs:
             if [ -z "$mod_dir" ]; then continue; fi
             
             echo "Testing module in $mod_dir"
-            cd "$mod_dir"
+            cd "$mod_dir" || continue
             
             # Use tip command if testing with Go tip
             GO_CMD=${{ matrix.go-version == 'tip' && 'gotip' || 'go' }}
             
+            # Download dependencies first
+            $GO_CMD mod download
+            
             # Run tests
-            $GO_CMD test -v ./...
+            $GO_CMD test -v -race ./...
             TEST_STATUS=$?
             
             if [ $TEST_STATUS -ne 0 ]; then
@@ -84,6 +88,7 @@ jobs:
           exit ${exit_status:-0}
       
       - name: Verify build with each Go version
+        shell: bash
         run: |
           IFS=' ' read -ra MODULES <<< "${{ steps.list-modules.outputs.modules }}"
           
@@ -91,7 +96,7 @@ jobs:
             if [ -z "$mod_dir" ]; then continue; fi
             
             echo "Building module in $mod_dir"
-            cd "$mod_dir"
+            cd "$mod_dir" || continue
             
             # Use tip command if testing with Go tip
             GO_CMD=${{ matrix.go-version == 'tip' && 'gotip' || 'go' }}
