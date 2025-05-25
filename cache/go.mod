@@ -1,6 +1,6 @@
 module github.com/go-fork/providers/cache
 
-go 1.23.9
+go 1.22
 
 require (
 	github.com/go-fork/di v0.0.3
