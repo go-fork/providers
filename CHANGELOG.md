@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+## [v0.0.4] - 2025-05-26
+
+### Đã thêm
+- **CI/CD**: Tối ưu hóa GitHub Actions workflows cho monorepo
+- **CI/CD**: Thêm workflow module-release cho việc release từng module riêng lẻ
+- **docs**: Cập nhật tài liệu hướng dẫn cài đặt module và quy trình release
+- **build**: Cập nhật .goreleaser.yml để hỗ trợ monorepo structure
+
+### Đã thay đổi
+- **CI/CD**: Loại bỏ các workflow không cần thiết (benchmark, examples, metrics-report)
+- **CI/CD**: Cập nhật CI workflow để test từng module riêng biệt
+- **build**: Cải thiện cấu hình GoReleaser cho các module hiện có
+- **docs**: Cập nhật README với cấu trúc module mới
+
+### Đã sửa
+- **modules**: Sửa lỗi versioning trong go.mod files
+- **CI/CD**: Sửa lỗi golangci-lint installation trong workflows
+
 ## [v0.0.3] - 2025-05-25
 
 ### Đã thêm
