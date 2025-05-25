@@ -41,6 +41,19 @@
 - **Tích hợp DI**: Dễ dàng tích hợp với Dependency Injection container.
 - **Extensible**: Dễ dàng mở rộng với driver tùy chỉnh thông qua interface Driver.
 
+## v0.0.3 - 2025-05-25
+
+### Added
+
+- **Đa dạng driver**: Hỗ trợ bộ nhớ (Memory), tệp tin (File), Redis, MongoDB và khả năng mở rộng driver tùy chỉnh.
+- **TTL (Time To Live)**: Tự động quản lý thời gian sống cho các mục trong cache.
+- **Remember pattern**: Hỗ trợ tính toán lười biếng và lưu trữ kết quả trong cache.
+- **Batch operations**: Thao tác hàng loạt để tối ưu hiệu suất.
+- **Serialization**: Tự động chuyển đổi giữa cấu trúc dữ liệu Go và định dạng lưu trữ.
+- **Thread-safe**: An toàn khi truy xuất và cập nhật đồng thời.
+- **Tích hợp DI**: Dễ dàng tích hợp với Dependency Injection container.
+- **Extensible**: Dễ dàng mở rộng với driver tùy chỉnh thông qua interface Driver.
+
 ## [v0.0.3] - 2025-05-25
 
 ### Added
