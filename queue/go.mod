@@ -4,8 +4,8 @@ go 1.23.9
 
 require (
 	github.com/go-fork/di v0.0.3
-	github.com/go-fork/providers/config v0.0.0-20250522103633-ecefb1f36ee8
-	github.com/go-fork/providers/scheduler v0.0.0-00010101000000-000000000000
+	github.com/go-fork/providers/config v0.0.3
+	github.com/go-fork/providers/scheduler v0.0.3
 	github.com/go-redis/redismock/v9 v9.2.0
 	github.com/redis/go-redis/v9 v9.8.0
 	github.com/stretchr/testify v1.10.0
@@ -37,6 +37,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-// replace github.com/go-fork/providers/config => ../config
-
 // replace github.com/go-fork/providers/scheduler => ../scheduler
+
+// replace github.com/go-fork/providers/config => ../config

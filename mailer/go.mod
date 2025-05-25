@@ -2,14 +2,10 @@ module github.com/go-fork/providers/mailer
 
 go 1.23.9
 
-// replace github.com/go-fork/providers/queue => ../queue
-
-// replace github.com/go-fork/providers/config => ../config
-
 require (
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-fork/di v0.0.3 // indirect
-	github.com/go-fork/providers/config v0.0.0-20250522103633-ecefb1f36ee8 // indirect
+	github.com/go-fork/providers/config v0.0.3 // indirect
 	github.com/go-viper/mapstructure/v2 v2.2.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/sagikazarmark/locafero v0.9.0 // indirect
