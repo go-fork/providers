@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## v0.0.3 - 2025-05-25
+
+* See GitHub release notes
+
 ### Added
 - Future features will be listed here
 
