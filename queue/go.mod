@@ -5,7 +5,7 @@ go 1.23.9
 require (
 	github.com/go-fork/di v0.0.3
 	github.com/go-fork/providers/config v0.0.3
-	github.com/go-fork/providers/scheduler v0.0.3
+	github.com/go-fork/providers/scheduler v0.0.4
 	github.com/go-redis/redismock/v9 v9.2.0
 	github.com/redis/go-redis/v9 v9.8.0
 	github.com/stretchr/testify v1.10.0

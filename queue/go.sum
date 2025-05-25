@@ -18,6 +18,10 @@ github.com/go-co-op/gocron v1.37.0 h1:ZYDJGtQ4OMhTLKOKMIch+/CY70Brbb1dGdooLEhh7b
 github.com/go-co-op/gocron v1.37.0/go.mod h1:3L/n6BkO7ABj+TrfSVXLRzsP26zmikL4ISkLQ0O8iNY=
 github.com/go-fork/di v0.0.3 h1:Ab0QGwolKmRGdTwZsSeIrml1uclnvBzUz9ZtsmgRjq8=
 github.com/go-fork/di v0.0.3/go.mod h1:BCsy72BM5cq4NL3sRFPMDuB58Hnpg4DPpfAqU8oiZuM=
+github.com/go-fork/providers/config v0.0.3 h1:SdN72bBY4kDLlxl90LKVDYZ7tecDDKqI1C0UeaDF6k0=
+github.com/go-fork/providers/config v0.0.3/go.mod h1:otIrnoQgknMX7OybC7DvkCkr8g1SiQWynMzVxdd+ibo=
+github.com/go-fork/providers/scheduler v0.0.4 h1:VbTgOqbNd+far8Rgih6XJbiAayA7q3B98r0wdLgw4hc=
+github.com/go-fork/providers/scheduler v0.0.4/go.mod h1:D88bsvaMxM3REnQxmyVVGPuaWkuqaundaa+KG00TxYA=
 github.com/go-redis/redismock/v9 v9.2.0 h1:ZrMYQeKPECZPjOj5u9eyOjg8Nnb0BS9lkVIZ6IpsKLw=
 github.com/go-redis/redismock/v9 v9.2.0/go.mod h1:18KHfGDK4Y6c2R0H38EUGWAdc7ZQS9gfYxc94k7rWT0=
 github.com/go-viper/mapstructure/v2 v2.2.1 h1:ZAaOCxANMuZx5RCeg0mBdEZk7DZasvvZIxtHqx8aGss=
