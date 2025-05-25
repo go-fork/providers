@@ -11,7 +11,7 @@ Dưới đây là danh sách các phiên bản đang được hỗ trợ về m�
 
 ## Báo cáo lỗ hổng
 
-Chúng tôi coi trọng vấn đề bảo mật của dự án PAMM Providers. Nếu bạn phát hiện ra
+Chúng tôi coi trọng vấn đề bảo mật của dự án Fork Providers. Nếu bạn phát hiện ra
 lỗ hổng bảo mật, vui lòng KHÔNG báo cáo công khai bằng cách tạo issue.
 
 Thay vào đó, vui lòng gửi báo cáo bảo mật qua:
@@ -23,7 +23,7 @@ Vui lòng bao gồm các thông tin sau trong báo cáo:
 
 - Mô tả về lỗ hổng và tác động tiềm ẩn
 - Các bước để tái hiện lỗ hổng
-- Phiên bản PAMM Providers bị ảnh hưởng
+- Phiên bản Fork Providers bị ảnh hưởng
 - Giải pháp hoặc biện pháp giảm thiểu nếu biết
 
 Chúng tôi sẽ xác nhận nhận được báo cáo của bạn trong vòng 48 giờ và sẽ làm việc với bạn để hiểu và giải quyết vấn đề.

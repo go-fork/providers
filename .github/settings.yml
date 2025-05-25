@@ -4,9 +4,9 @@
 # Cấu hình cài đặt mặc định cho repository
 repository:
   # Mô tả repository
-  description: "PAMM Providers: A collection of infrastructure providers for the PAMM framework"
+  description: "Fork Providers: A collection of infrastructure providers for the Fork framework"
   # URL dự án
-  homepage: "https://github.com/go-fork/pamm"
+  homepage: "https://github.com/go-fork/Fork"
   # Các chủ đề liên quan
   topics:
     - "go"

@@ -6,10 +6,11 @@ function find_previous_tag {
   # For module tags
   if [[ -n "$module" && "$module" != "." ]]; then
     # Find all tags for this module, sort by version, and get the previous one
-    git tag -l "${module}-v*" | sort -V | grep -B 1 "${current_tag}$" | head -n 1
+    # Support both new format (module/vX.Y.Z) and old format (module-vX.Y.Z)
+    git tag -l "${module}/*" "${module}-v*" | sort -V | grep -B 1 "${current_tag}$" | head -n 1
   else
     # For repository tags, find all vX.Y.Z tags
-    git tag -l "v*" | grep -v "-" | sort -V | grep -B 1 "${current_tag}$" | head -n 1
+    git tag -l "v*" | grep -v "-" | grep -v "/" | sort -V | grep -B 1 "${current_tag}$" | head -n 1
   fi
 }
 
@@ -108,7 +109,12 @@ function update_changelog_file {
     echo "Creating new $changelog_path"
     echo "# Changelog" > "$changelog_path"
     echo "" >> "$changelog_path"
-    echo "All notable changes to this project will be documented in this file." >> "$changelog_path"
+    
+    if [[ "$module_path" == "." ]]; then
+      echo "All notable changes to this project will be documented in this file." >> "$changelog_path"
+    else
+      echo "All notable changes to the ${module_path} module will be documented in this file." >> "$changelog_path"
+    fi
     echo "" >> "$changelog_path"
   fi
   
@@ -126,9 +132,28 @@ function update_changelog_file {
   echo "## $version - $CURRENT_DATE" >> "$temp_file"
   echo "" >> "$temp_file"
   
-  # Add generated changelog content
-  cat "$generated_changelog" >> "$temp_file"
-  echo "" >> "$temp_file"
+  # Check if the generated changelog is empty or very short
+  if [[ ! -s "$generated_changelog" || $(wc -l < "$generated_changelog") -lt 3 ]]; then
+    # Try to extract features from README if it exists
+    local readme_path="${module_path}/README.md"
+    if [[ -f "$readme_path" ]]; then
+      echo "Extracting features from README.md for the changelog"
+      echo "### Added" >> "$temp_file"
+      echo "" >> "$temp_file"
+      
+      # Extract key features from README
+      grep -A 20 "## Tính năng\|## Features" "$readme_path" | grep "^-\|^\*" | head -10 >> "$temp_file"
+      echo "" >> "$temp_file"
+    else
+      # Add generated changelog content even if short
+      cat "$generated_changelog" >> "$temp_file"
+      echo "" >> "$temp_file"
+    fi
+  else
+    # Add generated changelog content
+    cat "$generated_changelog" >> "$temp_file"
+    echo "" >> "$temp_file"
+  fi
   
   # Add existing changelog content (skip first three lines)
   if [[ $(wc -l < "$changelog_path") -gt 3 ]]; then

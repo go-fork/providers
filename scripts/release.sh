@@ -143,7 +143,7 @@ MODULES=$(find . -name "go.mod" -not -path "*/vendor/*" -not -path "*/.git/*" | 
 function create_github_release_for_module {
   local module=$1
   local version=$2
-  local tag_name=$3
+  local tag_name=$3  # This should now be in the format "module/vX.Y.Z"
   
   # Generate release notes file if CHANGELOG exists
   local release_notes=""
@@ -154,6 +154,18 @@ function create_github_release_for_module {
     release_notes=$(mktemp)
     # Extract the latest release notes from CHANGELOG
     awk -v ver="$version" 'BEGIN{p=0} $0 ~ "^## " ver {p=1} $0 ~ "^## " && $0 !~ ver && p==1 {p=0} p==1 {print}' "$module/CHANGELOG.md" > "$release_notes"
+    
+    # If we didn't extract anything meaningful (just the header), enhance with features from README
+    if [[ $(grep -v "^## $version" "$release_notes" | grep -v "^$" | wc -l) -eq 0 ]]; then
+      echo "Enhancing release notes with information from the README.md"
+      if [[ -f "$module/README.md" ]]; then
+        echo "## Key Features" >> "$release_notes"
+        echo "" >> "$release_notes"
+        # Extract features from README.md - typically in a section called "Features", "Tính năng", etc.
+        grep -A 20 "## Tính năng\|## Features" "$module/README.md" | grep "^-\|^\*" | head -10 >> "$release_notes"
+        echo "" >> "$release_notes"
+      fi
+    fi
   fi
   
   create_github_release "$tag_name" "Release $module $version" "$release_notes"
@@ -233,7 +245,7 @@ function release_module {
   local module=$1
   local version=$2
   
-  local tag_name="${module}-${version}"
+  local tag_name="${module}/${version}"
   
   # If push-only, just push the tag and exit
   if [[ "$PUSH_ONLY" == true ]]; then
@@ -268,9 +280,18 @@ function release_module {
     exit 1
   fi
   
-  # Update CHANGELOG.md if it exists
-  if [[ -f "$module/CHANGELOG.md" || "$GENERATE_CHANGELOG" == true ]]; then
-    echo "Updating $module/CHANGELOG.md"
+  # Update CHANGELOG.md if it exists or create it if it doesn't
+  if [[ -f "$module/CHANGELOG.md" || "$GENERATE_CHANGELOG" == true || ! -f "$module/CHANGELOG.md" ]]; then
+    if [[ ! -f "$module/CHANGELOG.md" ]]; then
+      echo "Creating $module/CHANGELOG.md"
+      # Creating basic CHANGELOG structure
+      echo "# Changelog" > "$module/CHANGELOG.md"
+      echo "" >> "$module/CHANGELOG.md"
+      echo "All notable changes to this module will be documented in this file." >> "$module/CHANGELOG.md"
+      echo "" >> "$module/CHANGELOG.md"
+    else
+      echo "Updating $module/CHANGELOG.md"
+    fi
     
     if [[ "$GENERATE_CHANGELOG" == true ]]; then
       # Generate changelog from commit messages
@@ -287,12 +308,60 @@ function release_module {
       CURRENT_DATE=$(date +"%Y-%m-%d")
       
       # Create changelog entry
-      CHANGELOG_ENTRY="## $version - $CURRENT_DATE\n\n* See GitHub release notes\n\n"
+      if [[ -f "$module/README.md" ]]; then
+        # Extract feature highlights from the README.md
+        echo "Extracting features from README.md for the changelog"
+        FEATURE_HIGHLIGHTS=$(mktemp)
+        grep -A 20 "## Tính năng\|## Features" "$module/README.md" | grep "^-\|^\*" | head -10 > "$FEATURE_HIGHLIGHTS"
+        
+        if [[ -s "$FEATURE_HIGHLIGHTS" ]]; then
+          # Create proper newlines using actual newlines instead of \n
+          {
+            echo "## $version - $CURRENT_DATE"
+            echo ""
+            echo "### Added"
+            echo ""
+            cat "$FEATURE_HIGHLIGHTS"
+            echo ""
+            echo ""
+          } > "$FEATURE_HIGHLIGHTS.formatted"
+          
+          # Read the formatted content into the CHANGELOG_ENTRY variable
+          CHANGELOG_ENTRY=$(cat "$FEATURE_HIGHLIGHTS.formatted")
+          
+          rm "$FEATURE_HIGHLIGHTS" "$FEATURE_HIGHLIGHTS.formatted"
+        else
+          CHANGELOG_ENTRY=$(echo -e "## $version - $CURRENT_DATE\n\n* See GitHub release notes\n\n")
+        fi
+      else
+        CHANGELOG_ENTRY=$(echo -e "## $version - $CURRENT_DATE\n\n* See GitHub release notes\n\n")
+      fi
       
       # Add entry to the top of the changelog (after the header)
-      sed -i '' -e "4i\\
-$CHANGELOG_ENTRY
-" "$module/CHANGELOG.md"
+      if [[ -f "$module/CHANGELOG.md" ]]; then
+        # Create a temporary file with the new content
+        TEMP_CHANGELOG=$(mktemp)
+        
+        # Write the header (first 3 lines)
+        head -n 3 "$module/CHANGELOG.md" > "$TEMP_CHANGELOG"
+        
+        # Add the new entry
+        echo "" >> "$TEMP_CHANGELOG"
+        echo "$CHANGELOG_ENTRY" >> "$TEMP_CHANGELOG"
+        
+        # Add the rest of the original content (skip first 3 lines)
+        tail -n +4 "$module/CHANGELOG.md" >> "$TEMP_CHANGELOG"
+        
+        # Replace the original file
+        mv "$TEMP_CHANGELOG" "$module/CHANGELOG.md"
+      else
+        # Create new file with header and entry
+        echo "# Changelog" > "$module/CHANGELOG.md"
+        echo "" >> "$module/CHANGELOG.md"
+        echo "All notable changes to the $module module will be documented in this file." >> "$module/CHANGELOG.md"
+        echo "" >> "$module/CHANGELOG.md"
+        echo "$CHANGELOG_ENTRY" >> "$module/CHANGELOG.md"
+      fi
       
       # Commit changelog update
       git add "$module/CHANGELOG.md"
@@ -300,8 +369,8 @@ $CHANGELOG_ENTRY
     fi
   fi
   
-  # Create tag for module (using a hyphen separator instead of slash)
-  local tag_name="${module}-${version}"
+  # Create tag for module (using the standard Go modules convention with slash separator)
+  local tag_name="${module}/${version}"
   
   # Check if tag exists and handle it
   if git tag | grep -q "^$tag_name$"; then
@@ -444,9 +513,68 @@ $CHANGELOG_ENTRY
   fi
 }
 
+# Check module compatibility if releasing multiple modules
+function check_module_compatibility {
+  if [[ -f "$SCRIPT_DIR/check_compatibility.sh" ]]; then
+    echo "Checking module compatibility..."
+    bash "$SCRIPT_DIR/check_compatibility.sh"
+    
+    # Ask user if they want to continue despite any issues
+    if [[ $? -ne 0 ]]; then
+      read -p "Do you want to continue with the release anyway? (y/n): " confirm
+      if [[ ! "$confirm" =~ ^[yY]$ ]]; then
+        echo "Release cancelled."
+        exit 1
+      fi
+    fi
+  else
+    echo "Warning: check_compatibility.sh not found, skipping compatibility check"
+  fi
+}
+
 # Execute the requested action
 if [[ "$RELEASE_ALL" == true ]]; then
+  # Check module compatibility
+  check_module_compatibility
   echo "Releasing all modules with version $VERSION"
+  
+  # Update main CHANGELOG.md with comprehensive information from all module changelogs
+  if [[ -f "$SCRIPT_DIR/update_main_changelog.sh" ]]; then
+    echo "Updating main CHANGELOG.md with comprehensive information from all module changelogs"
+    bash "$SCRIPT_DIR/update_main_changelog.sh" "$VERSION"
+    
+    # Commit changelog update
+    git add "CHANGELOG.md"
+    git commit -m "docs: update main CHANGELOG for $VERSION with comprehensive module information"
+  else
+    echo "Warning: update_main_changelog.sh not found, using simple changelog update"
+    
+    if [[ -f "CHANGELOG.md" ]]; then
+      echo "Updating main CHANGELOG.md with links to module changelogs"
+      CURRENT_DATE=$(date +"%Y-%m-%d")
+      
+      # Create changelog entry with links to module changelogs
+      MODULE_LINKS=""
+      for module in $MODULES; do
+        if [[ -f "$module/CHANGELOG.md" ]]; then
+          MODULE_LINKS+="* [$module](./$module/CHANGELOG.md)\n"
+        fi
+      done
+      
+      CHANGELOG_ENTRY="## $VERSION - $CURRENT_DATE\n\n### Module Updates\nSee individual module changelogs for details:\n\n$MODULE_LINKS\n"
+      
+      # Add entry to the top of the changelog (after the header)
+      sed -i '' -e "4i\\
+$CHANGELOG_ENTRY
+" "CHANGELOG.md"
+      
+      # Commit changelog update
+      git add "CHANGELOG.md"
+      git commit -m "docs: update main CHANGELOG for $VERSION with module links"
+    fi
+  fi
+  
+  # Process each module
   for module in $MODULES; do
     release_module "$module" "$VERSION"
   done
@@ -457,7 +585,7 @@ if [[ "$RELEASE_ALL" == true ]]; then
   if [[ "$CREATE_RELEASE" == true ]]; then
     echo "Creating GitHub releases for all modules..."
     for module in $MODULES; do
-      local tag_name="${module}-${VERSION}"
+      local tag_name="${module}/${VERSION}"
       create_github_release_for_module "$module" "$VERSION" "$tag_name"
     done
   fi

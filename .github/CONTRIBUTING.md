@@ -1,6 +1,6 @@
-# Hướng dẫn đóng góp cho PAMM Providers
+# Hướng dẫn đóng góp cho Fork Providers
 
-Cảm ơn bạn đã quan tâm đến việc đóng góp cho PAMM Providers! Dưới đây là các bước và quy tắc để đóng góp vào dự án.
+Cảm ơn bạn đã quan tâm đến việc đóng góp cho Fork Providers! Dưới đây là các bước và quy tắc để đóng góp vào dự án.
 
 ## Quy trình đóng góp
 
