@@ -1,0 +1,312 @@
+name: Main Workflow
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*', '*/v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  code-quality:
+    name: Code Quality Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.23.x'
+          cache: true
+      
+      - name: Install staticcheck
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+      
+      - name: Find all Go modules
+        id: find-modules
+        run: |
+          MODULES=$(find . -maxdepth 2 -name "go.mod" -exec dirname {} \; | sort | tr '\n' ' ')
+          echo "Found modules: $MODULES"
+          echo "modules=$MODULES" >> $GITHUB_OUTPUT
+      
+      - name: Run go vet & staticcheck
+        run: |
+          IFS=' ' read -ra MODULES <<< "${{ steps.find-modules.outputs.modules }}"
+          
+          for mod_dir in "${MODULES[@]}"; do
+            if [ -z "$mod_dir" ]; then continue; fi
+            
+            echo "Checking $mod_dir with go vet"
+            cd "$mod_dir" || continue
+            
+            # Run go vet
+            go vet ./...
+            if [ $? -ne 0 ]; then
+              echo "::error::go vet failed for $mod_dir"
+              exit 1
+            fi
+            
+            # Run staticcheck
+            echo "Checking $mod_dir with staticcheck"
+            staticcheck ./...
+            if [ $? -ne 0 ]; then
+              echo "::error::staticcheck failed for $mod_dir"
+              exit 1
+            fi
+            
+            cd - > /dev/null
+          done
+  
+  test-coverage:
+    name: Tests and Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.23.x'
+          cache: true
+      
+      - name: Find all Go modules
+        id: find-modules
+        run: |
+          MODULES=$(find . -maxdepth 2 -name "go.mod" -exec dirname {} \; | sort | tr '\n' ' ')
+          echo "Found modules: $MODULES"
+          echo "modules=$MODULES" >> $GITHUB_OUTPUT
+      
+      - name: Run tests with coverage
+        run: |
+          IFS=' ' read -ra MODULES <<< "${{ steps.find-modules.outputs.modules }}"
+          
+          # Track if any module fails coverage requirements
+          COVERAGE_FAILED=0
+          
+          for mod_dir in "${MODULES[@]}"; do
+            if [ -z "$mod_dir" ]; then continue; fi
+            
+            echo "Testing $mod_dir"
+            cd "$mod_dir" || continue
+            
+            # Run tests with coverage
+            go test -coverprofile=coverage.out -covermode=atomic ./...
+            if [ $? -ne 0 ]; then
+              echo "::error::Tests failed for $mod_dir"
+              exit 1
+            fi
+            
+            # Check coverage percentage
+            COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+            echo "Total coverage for $mod_dir: $COVERAGE%"
+            
+            # Check if any function has coverage < 75%
+            LOW_COV_FUNCS=$(go tool cover -func=coverage.out | awk '$3 < 75.0 && $3 != "100.0" {print $1, $2, $3}')
+            
+            if [ ! -z "$LOW_COV_FUNCS" ]; then
+              echo "::warning::Functions with coverage < 75% in $mod_dir:"
+              echo "$LOW_COV_FUNCS"
+            fi
+            
+            # If total coverage is less than 75%, fail the build
+            PASS_THRESHOLD=75.0
+            if (( $(echo "$COVERAGE < $PASS_THRESHOLD" | bc -l) )); then
+              echo "::error::Coverage too low for $mod_dir: $COVERAGE% (threshold: $PASS_THRESHOLD%)"
+              COVERAGE_FAILED=1
+            fi
+            
+            # Convert coverage to lcov format for report
+            go install github.com/jandelgado/gcov2lcov@latest
+            gcov2lcov -infile=coverage.out -outfile=coverage.lcov
+            
+            cd - > /dev/null
+          done
+          
+          if [ $COVERAGE_FAILED -eq 1 ]; then
+            exit 1
+          fi
+      
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          directory: ./
+          fail_ci_if_error: true
+          files: "*/coverage.lcov"
+          name: codecov-umbrella
+          verbose: true
+  
+  update-changelog:
+    name: Update Changelog
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
+    needs: [code-quality, test-coverage]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Extract tag info
+        id: tag
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          
+          # Check if it's a module release tag (like cache/v1.0.0)
+          if [[ $TAG == */* ]]; then
+            MODULE=$(echo $TAG | cut -d'/' -f1)
+            VERSION=$(echo $TAG | cut -d'/' -f2)
+            echo "is_module_tag=true" >> $GITHUB_OUTPUT
+            echo "module=$MODULE" >> $GITHUB_OUTPUT
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+          else
+            echo "is_module_tag=false" >> $GITHUB_OUTPUT
+            echo "version=$TAG" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Generate changelog
+        run: |
+          # Get the previous tag to compare with
+          if [[ "${{ steps.tag.outputs.is_module_tag }}" == "true" ]]; then
+            MODULE="${{ steps.tag.outputs.module }}"
+            PREV_TAG=$(git tag -l "$MODULE/*" | sort -V | tail -n2 | head -n1)
+            if [ -z "$PREV_TAG" ]; then
+              # If no previous module tag exists
+              COMMITS=$(git log --pretty=format:"- %s (%h)" -- $MODULE)
+            else
+              COMMITS=$(git log --pretty=format:"- %s (%h)" $PREV_TAG..${{ steps.tag.outputs.tag }} -- $MODULE)
+            fi
+            CHANGELOG_FILE="$MODULE/CHANGELOG.md"
+          else
+            PREV_TAG=$(git tag -l "v*" | grep -v "/" | sort -V | tail -n2 | head -n1)
+            if [ -z "$PREV_TAG" ]; then
+              # If no previous tag exists
+              COMMITS=$(git log --pretty=format:"- %s (%h)")
+            else
+              COMMITS=$(git log --pretty=format:"- %s (%h)" $PREV_TAG..${{ steps.tag.outputs.tag }})
+            fi
+            CHANGELOG_FILE="CHANGELOG.md"
+          fi
+          
+          # Create changelog content
+          CHANGELOG_CONTENT="## [${{ steps.tag.outputs.version }}] - $(date +%Y-%m-%d)\n\n"
+          
+          # Extract features
+          FEATURES=$(echo "$COMMITS" | grep -E "^- feat(\([^)]*\))?:" || echo "")
+          if [ ! -z "$FEATURES" ]; then
+            CHANGELOG_CONTENT="${CHANGELOG_CONTENT}### Added\n\n${FEATURES}\n\n"
+          fi
+          
+          # Extract bug fixes
+          FIXES=$(echo "$COMMITS" | grep -E "^- fix(\([^)]*\))?:" || echo "")
+          if [ ! -z "$FIXES" ]; then
+            CHANGELOG_CONTENT="${CHANGELOG_CONTENT}### Fixed\n\n${FIXES}\n\n"
+          fi
+          
+          # Extract changes
+          CHANGES=$(echo "$COMMITS" | grep -E "^- (refactor|perf|style|chore)(\([^)]*\))?:" || echo "")
+          if [ ! -z "$CHANGES" ]; then
+            CHANGELOG_CONTENT="${CHANGELOG_CONTENT}### Changed\n\n${CHANGES}\n\n"
+          fi
+          
+          # Update the changelog file
+          if [ -f "$CHANGELOG_FILE" ]; then
+            # Save changelog content to a temporary file
+            echo -e "$CHANGELOG_CONTENT" > changelog_update.tmp
+            
+            # Insert after the Unreleased section
+            sed -i '0,/## \[Unreleased\]/!b;//a\\' "$CHANGELOG_FILE"
+            sed -i "/## \[Unreleased\]/r changelog_update.tmp" "$CHANGELOG_FILE"
+            rm changelog_update.tmp
+          else
+            # Create new changelog if it doesn't exist
+            echo -e "# Changelog\n\n## [Unreleased]\n\n${CHANGELOG_CONTENT}" > "$CHANGELOG_FILE"
+          fi
+      
+      - name: Commit and push changelog
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          git add */CHANGELOG.md CHANGELOG.md
+          git commit -m "docs: update changelog for ${{ steps.tag.outputs.tag }}" || echo "No changes to commit"
+          git push
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
+    needs: [update-changelog]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Extract tag info
+        id: tag
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          
+          if [[ $TAG == */* ]]; then
+            MODULE=$(echo $TAG | cut -d'/' -f1)
+            VERSION=$(echo $TAG | cut -d'/' -f2)
+            echo "is_module_tag=true" >> $GITHUB_OUTPUT
+            echo "module=$MODULE" >> $GITHUB_OUTPUT
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+          else
+            echo "is_module_tag=false" >> $GITHUB_OUTPUT
+            echo "version=$TAG" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.23.x'
+          cache: true
+      
+      - name: Module Release
+        if: steps.tag.outputs.is_module_tag == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          name: ${{ steps.tag.outputs.module }} ${{ steps.tag.outputs.version }}
+          tag_name: ${{ steps.tag.outputs.tag }}
+          generate_release_notes: true
+          body: |
+            # ${{ steps.tag.outputs.module }} ${{ steps.tag.outputs.version }}
+            
+            This is a release of the ${{ steps.tag.outputs.module }} module.
+            
+            ## Usage
+            
+            ```go
+            go get github.com/go-fork/providers/${{ steps.tag.outputs.module }}@${{ steps.tag.outputs.tag }}
+            ```
+            
+            ## Module Details
+            
+            - **Module Path**: `github.com/go-fork/providers/${{ steps.tag.outputs.module }}`
+            - **Version**: `${{ steps.tag.outputs.version }}`
+            - **Go Version**: 1.23.9
+          files: |
+            ${{ steps.tag.outputs.module }}/**/*.go
+            ${{ steps.tag.outputs.module }}/go.mod
+            ${{ steps.tag.outputs.module }}/go.sum
+            ${{ steps.tag.outputs.module }}/README.md
+      
+      - name: Repository Release
+        if: steps.tag.outputs.is_module_tag == 'false'
+        uses: softprops/action-gh-release@v1
+        with:
+          name: ${{ steps.tag.outputs.version }}
+          tag_name: ${{ steps.tag.outputs.tag }}
+          generate_release_notes: true
+          body_path: CHANGELOG.md
