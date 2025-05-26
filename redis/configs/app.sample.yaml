@@ -1,0 +1,39 @@
+redis:
+  # Standard client configuration
+  client:
+    host: localhost
+    port: 6379
+    password: ""
+    db: 0
+    prefix: "app:"
+    timeout: 5  # seconds
+    dial_timeout: 5  # seconds
+    read_timeout: 3  # seconds
+    write_timeout: 3  # seconds
+    pool_size: 10
+    min_idle_conns: 5
+  
+  # Universal client configuration (for cluster/sentinel/standalone)
+  universal:
+    addresses:
+      - localhost:6379
+    password: ""
+    db: 0
+    prefix: "app:"
+    timeout: 5  # seconds
+    dial_timeout: 5  # seconds
+    read_timeout: 3  # seconds
+    write_timeout: 3  # seconds
+    max_retries: 3
+    min_retry_backoff: 8  # milliseconds
+    max_retry_backoff: 512  # milliseconds
+    pool_size: 10
+    min_idle_conns: 5
+    
+    # Cluster specific configuration
+    cluster_mode: false
+    max_redirects: 3
+    
+    # Sentinel specific configuration
+    sentinel_mode: false
+    master_name: "mymaster"
