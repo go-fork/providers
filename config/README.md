@@ -297,9 +297,9 @@ if authEnabled, ok := cfg.GetBool("services.auth.enabled"); ok && authEnabled {
 
 ## Sử dụng trong unit test
 
-Package `config` cung cấp một triển khai giả lập (mock) cho interface Manager thông qua package `config/mocks`, giúp đơn giản hóa việc viết unit test cho các ứng dụng sử dụng cấu hình.
+Package `config` cung cấp một MockManager được tạo tự động bởi [mockery](https://github.com/vektra/mockery) thông qua package `config/mocks`, hỗ trợ đầy đủ testify/mock framework để viết unit test hiệu quả.
 
-### Mock Manager
+### Mock Manager với Expecter Pattern (Khuyến nghị)
 
 ```go
 import (
@@ -311,12 +311,12 @@ import (
 
 func TestServiceWithConfig(t *testing.T) {
 	// Tạo mock manager
-	mockCfg := mocks.NewMockManager()
+	mockCfg := &mocks.MockManager{}
 	
-	// Thiết lập dữ liệu giả lập
-	mockCfg.Set("service.enabled", true)
-	mockCfg.Set("service.port", 8080)
-	mockCfg.Set("service.timeout", "30s")
+	// Thiết lập expectations sử dụng EXPECT()
+	mockCfg.EXPECT().GetBool("service.enabled").Return(true, true)
+	mockCfg.EXPECT().GetInt("service.port").Return(8080, true)
+	mockCfg.EXPECT().GetDuration("service.timeout").Return(30*time.Second, true)
 	
 	// Khởi tạo service với mock config
 	service := NewService(mockCfg)
@@ -324,26 +324,73 @@ func TestServiceWithConfig(t *testing.T) {
 	// Kiểm tra kết quả
 	assert.True(t, service.IsEnabled())
 	assert.Equal(t, 8080, service.Port())
+	
+	// Xác thực tất cả expectations đã được gọi
+	mockCfg.AssertExpectations(t)
 }
 ```
 
-### Điều khiển hành vi của mock
+### Mock Manager với Traditional Pattern
 
 ```go
-// Thiết lập giá trị trả về cho phương thức Has
-mockCfg.SetHasKey(true) // Has() sẽ luôn trả về true
-
-// Thiết lập map cấu hình hoàn chỉnh
-config := map[string]interface{}{
-	"app.name": "TestApp",
-	"app.version": "1.0.0",
-	"database": map[string]interface{}{
-		"host": "localhost",
-		"port": 5432,
-	},
+func TestServiceWithTraditionalMock(t *testing.T) {
+	mockCfg := &mocks.MockManager{}
+	
+	// Thiết lập mock responses với On()
+	mockCfg.On("GetString", "app.name").Return("TestApp", true)
+	mockCfg.On("Has", "feature.enabled").Return(true)
+	mockCfg.On("Set", "runtime.status", mock.Anything).Return(nil)
+	
+	// Test code
+	name, exists := mockCfg.GetString("app.name")
+	assert.True(t, exists)
+	assert.Equal(t, "TestApp", name)
+	
+	hasFeature := mockCfg.Has("feature.enabled")
+	assert.True(t, hasFeature)
+	
+	err := mockCfg.Set("runtime.status", "running")
+	assert.NoError(t, err)
+	
+	// Xác thực expectations
+	mockCfg.AssertExpectations(t)
 }
-mockCfg.SetConfig(config)
-
-// Thiết lập lỗi cho phương thức Unmarshal
-mockCfg.SetUnmarshalError(errors.New("unmarshal error"))
 ```
+
+### Xử lý lỗi và các trường hợp đặc biệt
+
+```go
+func TestErrorHandling(t *testing.T) {
+	mockCfg := &mocks.MockManager{}
+	
+	// Mock trả về lỗi cho Unmarshal
+	expectedErr := errors.New("unmarshal failed")
+	mockCfg.EXPECT().Unmarshal(mock.Anything).Return(expectedErr)
+	
+	// Mock trả về key không tồn tại
+	mockCfg.EXPECT().GetString("nonexistent.key").Return("", false)
+	
+	// Test error cases
+	var config struct{}
+	err := mockCfg.Unmarshal(&config)
+	assert.Error(t, err)
+	assert.Equal(t, expectedErr, err)
+	
+	value, exists := mockCfg.GetString("nonexistent.key")
+	assert.False(t, exists)
+	assert.Empty(t, value)
+	
+	mockCfg.AssertExpectations(t)
+}
+```
+
+### Tái tạo Mock khi Interface thay đổi
+
+Khi interface Manager có thay đổi, bạn có thể tái tạo mock bằng cách chạy:
+
+```bash
+cd /path/to/config
+mockery --name Manager
+```
+
+Mock sẽ được tạo lại tự động với tất cả các phương thức mới và cập nhật.

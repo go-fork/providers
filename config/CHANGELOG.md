@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [v0.0.6] - 2025-05-26
+
+### Changed
+- **BREAKING**: Replaced manual MockManager implementation with mockery-generated version
+- Enhanced MockManager with full testify/mock integration and expecter pattern support
+- Updated mocks/doc.go with comprehensive documentation and usage examples
+
+### Added
+- Added .mockery.yaml configuration file for consistent mock generation
+- Support for both Expecter pattern (`EXPECT()` method) and Traditional mock pattern (`On()` method)
+- Automatic panic when mock methods are called without proper expectations
+- Better type safety and IDE support for mocks
+
+### Technical Details
+- MockManager now provides 1,748 lines of auto-generated mock code
+- Full compatibility with testify/mock framework
+- Improved test reliability with `AssertExpectations()` validation
+- Easy mock regeneration with `mockery --name Manager` command
+
 ## [v0.0.5] - 2025-05-26
 
 ### Changed
