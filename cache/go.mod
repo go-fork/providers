@@ -3,7 +3,7 @@ module github.com/go-fork/providers/cache
 go 1.23.9
 
 require (
-	github.com/go-fork/di v0.0.4
+	github.com/go-fork/di v0.0.5
 	github.com/go-redis/redismock/v9 v9.2.0
 	github.com/redis/go-redis/v9 v9.8.0
 	go.mongodb.org/mongo-driver v1.17.3
