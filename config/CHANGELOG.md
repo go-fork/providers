@@ -2,10 +2,16 @@
 
 ## [Unreleased]
 
+## [v0.0.5] - 2025-05-26
+
 ### Changed
 - Upgraded github.com/go-fork/di dependency from v0.0.4 to v0.0.5
 - Implemented new interface methods from di.ServiceProvider: Requires() and Providers()
 - Enhanced test coverage for ServiceProvider implementation
+- Updated documentation in doc.go to reflect new interface methods
+
+### Fixed
+- Fixed staticcheck warning S1040 by removing redundant type assertion in tests
 
 ## v0.0.4 - 2025-05-25
 
