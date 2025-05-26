@@ -2,11 +2,12 @@
 
 ## [Unreleased]
 
-## v0.0.3 - 2025-05-25
+### Changed
+- Upgraded github.com/go-fork/di dependency from v0.0.4 to v0.0.5
+- Implemented new interface methods from di.ServiceProvider: Requires() and Providers()
+- Enhanced test coverage for ServiceProvider implementation
 
-* See GitHub release notes
-
-## v0.0.3 - 2025-05-25
+## v0.0.4 - 2025-05-25
 
 * See GitHub release notes
 

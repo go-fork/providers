@@ -14,7 +14,8 @@
 //     để truy xuất và quản lý cấu hình, đồng thời bổ sung các tiện ích so với Viper gốc.
 //
 //   - ServiceProvider: Implementation của di.ServiceProvider để tích hợp với DI container,
-//     cho phép đăng ký và cấu hình tự động cho Manager.
+//     cho phép đăng ký và cấu hình tự động cho Manager. Tuân thủ đầy đủ interface di.ServiceProvider
+//     với các phương thức Register(), Boot(), Requires(), và Providers().
 //
 // # Tính năng nổi bật
 //
@@ -32,6 +33,11 @@
 //   - Sử dụng mô hình composition thông qua embedded struct để kế thừa tính năng của Viper
 //   - Interface Manager định nghĩa API chuẩn cho việc truy xuất và quản lý cấu hình
 //   - manager struct cài đặt interface Manager bằng cách nhúng *viper.Viper
+//   - ServiceProvider cài đặt đầy đủ di.ServiceProvider interface, cung cấp các phương thức:
+//   - Register(): Đăng ký Manager vào DI container với key "config"
+//   - Boot(): Khởi tạo cấu hình sau khi đăng ký
+//   - Requires(): Trả về danh sách các provider mà config phụ thuộc (hiện tại không có)
+//   - Providers(): Trả về danh sách các service mà config cung cấp (key "config")
 //   - Các phương thức của Manager đều được bổ sung kiểm tra tồn tại (IsSet) trước khi truy xuất,
 //     trả về giá trị mặc định phù hợp và boolean cho biết key có tồn tại không
 //
@@ -77,4 +83,7 @@
 //
 // Package này giúp nhất quán hóa quản lý cấu hình trong ứng dụng Go, tận dụng
 // sức mạnh của Viper và bổ sung các tính năng hữu ích cho ứng dụng hiện đại.
+//
+// Module này tương thích đầy đủ với github.com/go-fork/di từ phiên bản v0.0.5 trở lên,
+// cài đặt đầy đủ interface ServiceProvider với các phương thức Register, Boot, Requires và Providers.
 package config

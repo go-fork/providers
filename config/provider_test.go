@@ -22,6 +22,10 @@ type mockAppInvalid struct{}
 func TestNewServiceProvider(t *testing.T) {
 	provider := NewServiceProvider()
 	assert.NotNil(t, provider, "NewServiceProvider should return a non-nil provider")
+
+	// Verify the returned object implements di.ServiceProvider interface
+	_, ok := provider.(di.ServiceProvider)
+	assert.True(t, ok, "Provider should implement di.ServiceProvider interface")
 }
 
 func TestServiceProvider_Register(t *testing.T) {
@@ -38,6 +42,10 @@ func TestServiceProvider_Register(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, cfg, "Config should be registered in container")
 
+	// Verify that the registered object is a Manager
+	_, ok := cfg.(Manager)
+	assert.True(t, ok, "Registered object should implement Manager interface")
+
 	// Test with app that doesn't implement Container()
 	invalidApp := &mockAppInvalid{}
 	// This should not panic
@@ -48,6 +56,11 @@ func TestServiceProvider_Register(t *testing.T) {
 	assert.Panics(t, func() {
 		provider.Register(app)
 	}, "Register should panic when container is nil")
+
+	// Test with nil app
+	assert.NotPanics(t, func() {
+		provider.Register(nil)
+	}, "Register should not panic with nil app")
 }
 
 func TestServiceProvider_Boot(t *testing.T) {
@@ -69,4 +82,23 @@ func TestServiceProvider_Boot(t *testing.T) {
 	assert.NotPanics(t, func() {
 		provider.Boot(nil)
 	}, "Boot should not panic with nil app")
+}
+
+func TestServiceProvider_Requires(t *testing.T) {
+	provider := NewServiceProvider()
+
+	// Verify that Requires returns an empty slice
+	requires := provider.Requires()
+	assert.NotNil(t, requires, "Requires should return a non-nil slice")
+	assert.Empty(t, requires, "Config provider shouldn't have any dependencies")
+}
+
+func TestServiceProvider_Providers(t *testing.T) {
+	provider := NewServiceProvider()
+
+	// Verify that Providers returns a slice with "config"
+	providers := provider.Providers()
+	assert.NotNil(t, providers, "Providers should return a non-nil slice")
+	assert.Len(t, providers, 1, "Config provider should register exactly one service")
+	assert.Equal(t, "config", providers[0], "Config provider should register a 'config' service")
 }

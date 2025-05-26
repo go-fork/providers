@@ -81,3 +81,24 @@ func (p *ServiceProvider) Boot(app interface{}) {
 		return
 	}
 }
+
+// Requires trả về danh sách các provider mà provider này phụ thuộc vào.
+//
+// ConfigServiceProvider không phụ thuộc vào bất kỳ provider nào khác,
+// nên phương thức này trả về một slice rỗng.
+//
+// Returns:
+//   - []string: Một slice rỗng vì không có dependencies
+func (p *ServiceProvider) Requires() []string {
+	return []string{} // Không có dependencies
+}
+
+// Providers trả về danh sách các service mà provider này đăng ký.
+//
+// ConfigServiceProvider đăng ký config manager vào container với key "config"
+//
+// Returns:
+//   - []string: Mảng chứa tên của service được đăng ký - "config"
+func (p *ServiceProvider) Providers() []string {
+	return []string{"config"}
+}
