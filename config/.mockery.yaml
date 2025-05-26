@@ -1,0 +1,11 @@
+with-expecter: true
+packages:
+  "github.com/go-fork/providers/config":
+    interfaces:
+      Manager:
+        config:
+          dir: "mocks"
+          filename: "manager.go"
+          mockname: "MockManager"
+          outpkg: "mocks"
+          structname: "MockManager"
