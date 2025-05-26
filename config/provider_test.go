@@ -23,9 +23,8 @@ func TestNewServiceProvider(t *testing.T) {
 	provider := NewServiceProvider()
 	assert.NotNil(t, provider, "NewServiceProvider should return a non-nil provider")
 
-	// Verify the returned object implements di.ServiceProvider interface
-	_, ok := provider.(di.ServiceProvider)
-	assert.True(t, ok, "Provider should implement di.ServiceProvider interface")
+	// Verify that the provider object is properly initialized
+	assert.IsType(t, &ServiceProvider{}, provider, "Provider should be of type *ServiceProvider")
 }
 
 func TestServiceProvider_Register(t *testing.T) {
