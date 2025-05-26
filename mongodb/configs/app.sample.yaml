@@ -1,0 +1,119 @@
+# MongoDB Configuration Sample
+mongodb:
+  # Connection URI for MongoDB
+  # Format: mongodb://[username:password@]host1[:port1][,...hostN[:portN]][/[defaultauthdb][?options]]
+  uri: "mongodb://localhost:27017"
+  
+  # Default database name
+  database: "myapp"
+  
+  # Application name to identify the connection in MongoDB logs
+  app_name: "my-golang-app"
+  
+  # Connection pool settings
+  max_pool_size: 100          # Maximum number of connections in the connection pool
+  min_pool_size: 5            # Minimum number of connections in the connection pool
+  max_connecting: 10          # Maximum number of connections being established concurrently
+  max_conn_idle_time: 600000  # Maximum time (ms) a connection can remain idle before being removed
+  
+  # Timeout settings (all in milliseconds)
+  connect_timeout: 30000            # Connection timeout
+  server_selection_timeout: 30000   # Server selection timeout
+  socket_timeout: 0                 # Socket timeout (0 = no timeout)
+  heartbeat_interval: 10000         # Heartbeat interval for monitoring server health
+  local_threshold: 15000            # Local threshold for server selection
+  timeout: 30000                    # General operation timeout
+  
+  # TLS/SSL configuration
+  tls:
+    enabled: false                # Enable/disable TLS
+    insecure_skip_verify: false   # Skip certificate verification (for testing only)
+    ca_file: ""                   # Path to CA certificate file
+    cert_file: ""                 # Path to client certificate file
+    key_file: ""                  # Path to client private key file
+    
+  # Authentication configuration
+  auth:
+    username: ""                  # Username for authentication
+    password: ""                  # Password for authentication
+    auth_source: "admin"          # Authentication database
+    # Authentication mechanisms: SCRAM-SHA-256, SCRAM-SHA-1, MONGODB-CR, PLAIN, GSSAPI, MONGODB-X509, MONGODB-AWS, MONGODB-OIDC
+    auth_mechanism: "SCRAM-SHA-256"
+    # Additional authentication mechanism properties
+    auth_mechanism_properties:
+      SERVICE_NAME: "mongodb"                    # For GSSAPI
+      CANONICALIZE_HOST_NAME: "false"          # For GSSAPI
+      SERVICE_REALM: ""                        # For GSSAPI
+      SERVICE_HOST: ""                         # For GSSAPI
+      AWS_SESSION_TOKEN: ""                    # For MONGODB-AWS
+  
+  # Read preference configuration
+  # Modes: primary, primaryPreferred, secondary, secondaryPreferred, nearest
+  read_preference:
+    mode: "primary"
+    # Tag sets for read preference (optional)
+    tag_sets: []
+    # Maximum staleness in seconds (optional)
+    max_staleness: 90
+    # Enable hedge reads for sharded clusters
+    hedge_enabled: false
+    
+  # Read concern configuration
+  # Levels: local, available, majority, linearizable, snapshot
+  read_concern:
+    level: "majority"
+    
+  # Write concern configuration
+  write_concern:
+    # Write acknowledgment: 0 (unacknowledged), 1 (acknowledged), "majority", or custom tag
+    w: "majority"
+    # Journal acknowledgment
+    journal: true
+    # Write timeout in milliseconds
+    w_timeout: 30000
+    
+  # Retry configuration
+  retry_writes: true             # Enable retryable writes
+  retry_reads: true              # Enable retryable reads
+  
+  # Compression configuration
+  compressors: []               # Compression algorithms: snappy, zlib, zstd
+  zlib_level: 6                 # Compression level for zlib (1-9)
+  zstd_level: 6                 # Compression level for zstd (1-22)
+  
+  # Replica set configuration
+  replica_set: ""               # Replica set name
+  direct: false                 # Connect directly to a specific server
+  
+  # Load balancer configuration
+  load_balanced: false          # Enable load balanced mode
+  
+  # SRV configuration for DNS-based discovery
+  srv:
+    max_hosts: 0                # Maximum number of hosts to connect to (0 = no limit)
+    service_name: "mongodb"     # SRV service name
+    
+  # Server API configuration
+  server_api:
+    version: "1"                # API version ("1" is currently supported)
+    strict: false               # Strict API version mode
+    deprecation_errors: false   # Return errors for deprecated features
+    
+  # Monitoring and logging
+  server_monitoring_mode: "auto"      # Server monitoring mode: auto, stream, poll
+  disable_ocsp_endpoint_check: false  # Disable OCSP endpoint check for TLS
+  
+  # BSON configuration
+  bson:
+    use_json_struct_tags: false      # Use JSON struct tags for BSON marshaling
+    error_on_inline_map: false       # Error on inline map fields
+    allow_truncating_floats: false   # Allow truncating floats when converting to integers
+    
+  # Auto-encryption configuration (Enterprise/Atlas only)
+  auto_encryption:
+    enabled: false
+    key_vault_namespace: ""          # Key vault namespace (database.collection)
+    kms_providers: {}                # KMS providers configuration
+    schema_map: {}                   # Schema map for automatic encryption
+    bypass_auto_encryption: false   # Bypass automatic encryption
+    extra_options: {}                # Extra options for auto-encryption

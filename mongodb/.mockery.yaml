@@ -1,0 +1,15 @@
+with-expecter: true
+keeptree: true
+packages:
+  github.com/go-fork/providers/mongodb:
+    interfaces:
+      Manager:
+        config:
+          filename: "manager.go"
+          dir: "mocks"
+          mockname: "MockManager"
+          outpkg: "mocks"
+          inpackage: false
+          testonly: false
+          all: false
+          case: "camel"
