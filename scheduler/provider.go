@@ -3,6 +3,8 @@ package scheduler
 
 import (
 	"github.com/go-fork/di"
+	"github.com/go-fork/providers/config"
+	"github.com/go-fork/providers/redis"
 )
 
 // ServiceProvider cung cấp dịch vụ scheduler và tích hợp với DI container.
@@ -16,7 +18,9 @@ import (
 //
 // Để sử dụng ServiceProvider, ứng dụng cần:
 //   - Implement interface Container() *di.Container để cung cấp DI container
-type ServiceProvider struct{}
+type ServiceProvider struct {
+	providers []string
+}
 
 // NewServiceProvider trả về một ServiceProvider mới cho module scheduler.
 //
@@ -61,9 +65,37 @@ func (p *ServiceProvider) Register(app interface{}) {
 		panic("DI container is nil")
 	}
 
-	// Tạo một scheduler manager mới và đăng ký vào container
-	manager := NewScheduler()
+	// Load cấu hình scheduler với default fallback
+	cfg := DefaultConfig()
+
+	// Thử lấy cấu hình từ config provider (optional)
+	if configInstance, err := container.Make("config"); err == nil {
+		if configManager, ok := configInstance.(config.Manager); ok {
+			// Load cấu hình từ file config, nếu lỗi thì sử dụng default
+			configManager.UnmarshalKey("scheduler", &cfg)
+		}
+	}
+
+	// Tạo scheduler manager với cấu hình
+	manager := NewSchedulerWithConfig(cfg)
+
+	// Cấu hình distributed locking nếu được bật
+	if cfg.DistributedLock.Enabled {
+		if redisInstance, err := container.Make("redis"); err == nil {
+			// Thử lấy redis client từ redis provider
+			if redisManager, ok := redisInstance.(redis.Manager); ok {
+				if redisClient, err := redisManager.Client(); err == nil {
+					if locker, err := NewRedisLocker(redisClient, cfg.Options); err == nil {
+						manager = manager.WithDistributedLocker(locker)
+					}
+				}
+			}
+		}
+	}
+
+	// Đăng ký scheduler manager vào container
 	container.Instance("scheduler", manager)
+	p.providers = append(p.providers, "scheduler")
 }
 
 // Boot được gọi sau khi tất cả các service provider đã được đăng ký.
@@ -104,5 +136,30 @@ func (p *ServiceProvider) Boot(app interface{}) {
 		return // Scheduler đã được start rồi
 	}
 
-	scheduler.StartAsync()
+	// Lấy cấu hình để kiểm tra AutoStart
+	cfg := DefaultConfig()
+
+	// Thử lấy cấu hình từ config provider (optional)
+	if configInstance, err := container.Make("config"); err == nil {
+		if configManager, ok := configInstance.(config.Manager); ok {
+			// Load cấu hình từ file config, nếu lỗi thì sử dụng default
+			configManager.UnmarshalKey("scheduler", &cfg)
+		}
+	}
+
+	// Chỉ auto start nếu được cấu hình để làm vậy
+	if cfg.AutoStart {
+		scheduler.StartAsync()
+	}
+}
+
+func (p *ServiceProvider) Requires() []string {
+	return []string{
+		"config",
+		"redis",
+	}
+}
+
+func (p *ServiceProvider) Providers() []string {
+	return p.providers
 }

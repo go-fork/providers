@@ -15,10 +15,7 @@ func TestNewScheduler(t *testing.T) {
 	}
 
 	// Kiểm tra xem scheduler có implement Manager interface không
-	_, ok := scheduler.(Manager)
-	if !ok {
-		t.Fatal("NewScheduler() does not implement Manager interface")
-	}
+	var _ Manager = scheduler
 }
 
 func TestSchedulerFluentInterface(t *testing.T) {

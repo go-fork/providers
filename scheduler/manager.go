@@ -111,7 +111,16 @@ type manager struct {
 }
 
 // NewScheduler tạo một đối tượng Manager mới sử dụng gocron làm backend.
-func NewScheduler() Manager {
+// Nhận tham số config để cấu hình scheduler.
+func NewScheduler(cfg ...Config) Manager {
+	scheduler := gocron.NewScheduler(time.Local)
+	return &manager{
+		Scheduler: scheduler,
+	}
+}
+
+// NewSchedulerWithConfig tạo một đối tượng Manager mới với cấu hình cụ thể.
+func NewSchedulerWithConfig(cfg Config) Manager {
 	scheduler := gocron.NewScheduler(time.Local)
 	return &manager{
 		Scheduler: scheduler,

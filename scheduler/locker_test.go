@@ -3,7 +3,6 @@ package scheduler
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/go-co-op/gocron"
 	"github.com/redis/go-redis/v9"
@@ -16,16 +15,16 @@ func TestDefaultRedisLockerOptions(t *testing.T) {
 		t.Errorf("Expected KeyPrefix 'scheduler_lock:', got '%s'", options.KeyPrefix)
 	}
 
-	if options.LockDuration != 30*time.Second {
-		t.Errorf("Expected LockDuration 30s, got %v", options.LockDuration)
+	if options.LockDuration != 30 {
+		t.Errorf("Expected LockDuration 30, got %d", options.LockDuration)
 	}
 
 	if options.MaxRetries != 3 {
 		t.Errorf("Expected MaxRetries 3, got %d", options.MaxRetries)
 	}
 
-	if options.RetryDelay != 100*time.Millisecond {
-		t.Errorf("Expected RetryDelay 100ms, got %v", options.RetryDelay)
+	if options.RetryDelay != 100 {
+		t.Errorf("Expected RetryDelay 100, got %d", options.RetryDelay)
 	}
 }
 
@@ -47,7 +46,7 @@ func TestValidateRedisLockerOptions(t *testing.T) {
 				KeyPrefix:    "test:",
 				LockDuration: 0,
 				MaxRetries:   3,
-				RetryDelay:   100 * time.Millisecond,
+				RetryDelay:   100,
 			},
 			wantErr: true,
 			errType: ErrInvalidLockDuration,
@@ -56,9 +55,9 @@ func TestValidateRedisLockerOptions(t *testing.T) {
 			name: "invalid lock duration - negative",
 			options: RedisLockerOptions{
 				KeyPrefix:    "test:",
-				LockDuration: -1 * time.Second,
+				LockDuration: -1,
 				MaxRetries:   3,
-				RetryDelay:   100 * time.Millisecond,
+				RetryDelay:   100,
 			},
 			wantErr: true,
 			errType: ErrInvalidLockDuration,
@@ -67,9 +66,9 @@ func TestValidateRedisLockerOptions(t *testing.T) {
 			name: "invalid max retries - negative",
 			options: RedisLockerOptions{
 				KeyPrefix:    "test:",
-				LockDuration: 30 * time.Second,
+				LockDuration: 30,
 				MaxRetries:   -1,
-				RetryDelay:   100 * time.Millisecond,
+				RetryDelay:   100,
 			},
 			wantErr: true,
 			errType: ErrInvalidMaxRetries,
@@ -78,9 +77,9 @@ func TestValidateRedisLockerOptions(t *testing.T) {
 			name: "invalid retry delay - negative",
 			options: RedisLockerOptions{
 				KeyPrefix:    "test:",
-				LockDuration: 30 * time.Second,
+				LockDuration: 30,
 				MaxRetries:   3,
-				RetryDelay:   -1 * time.Millisecond,
+				RetryDelay:   -1,
 			},
 			wantErr: true,
 			errType: ErrInvalidRetryDelay,
@@ -89,9 +88,9 @@ func TestValidateRedisLockerOptions(t *testing.T) {
 			name: "invalid key prefix - empty",
 			options: RedisLockerOptions{
 				KeyPrefix:    "",
-				LockDuration: 30 * time.Second,
+				LockDuration: 30,
 				MaxRetries:   3,
-				RetryDelay:   100 * time.Millisecond,
+				RetryDelay:   100,
 			},
 			wantErr: true,
 			errType: ErrInvalidKeyPrefix,
@@ -100,9 +99,9 @@ func TestValidateRedisLockerOptions(t *testing.T) {
 			name: "max retries zero is valid",
 			options: RedisLockerOptions{
 				KeyPrefix:    "test:",
-				LockDuration: 30 * time.Second,
+				LockDuration: 30,
 				MaxRetries:   0,
-				RetryDelay:   100 * time.Millisecond,
+				RetryDelay:   100,
 			},
 			wantErr: false,
 		},
@@ -110,7 +109,7 @@ func TestValidateRedisLockerOptions(t *testing.T) {
 			name: "retry delay zero is valid",
 			options: RedisLockerOptions{
 				KeyPrefix:    "test:",
-				LockDuration: 30 * time.Second,
+				LockDuration: 30,
 				MaxRetries:   3,
 				RetryDelay:   0,
 			},
@@ -148,9 +147,9 @@ func TestNewRedisLockerWithInvalidOptions(t *testing.T) {
 
 	invalidOptions := RedisLockerOptions{
 		KeyPrefix:    "",
-		LockDuration: -1 * time.Second,
+		LockDuration: -1,
 		MaxRetries:   -1,
-		RetryDelay:   -1 * time.Millisecond,
+		RetryDelay:   -1,
 	}
 
 	_, err := NewRedisLocker(client, invalidOptions)

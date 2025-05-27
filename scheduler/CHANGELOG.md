@@ -2,6 +2,44 @@
 
 ## [Unreleased]
 
+## v0.0.4 - 2025-05-28
+
+### Added
+
+- **Configuration-driven system**: Added comprehensive configuration support through `Config` struct and `RedisLockerOptions`
+- **Auto-start feature**: Added `auto_start` configuration option to control scheduler startup behavior
+- **Dual config system**: 
+  - `RedisLockerOptions` with int values for config files (seconds/milliseconds)
+  - `RedisLockerOptionsTime` with time.Duration for internal use
+  - `ToTimeDuration()` conversion method between the two
+- **Configuration-driven distributed locking**: Automatic Redis locker setup when enabled in config
+- **Enhanced ServiceProvider**: Added `NewSchedulerWithConfig()` function for configuration-driven setup
+- **Improved dependency management**: Added proper require dependencies for config and redis providers
+
+### Changed
+
+- **BREAKING**: Updated `RedisLockerOptions` to use int values instead of time.Duration for better config file compatibility
+- **Provider restructure**: Completely restructured ServiceProvider following separation of concerns
+  - Provider now only loads config and passes to manager (no longer handles manager logic)
+  - Added automatic distributed locking setup when enabled in config
+  - Fixed interface compliance with `Providers()` method instead of `Provides()`
+- **Manager enhancement**: Added `NewSchedulerWithConfig()` to support configuration-driven initialization
+- **Test compatibility**: Updated all tests to work with new int-based config values
+
+### Fixed
+
+- **Static analysis**: Fixed all staticcheck warnings by removing unnecessary type assertions
+- **Interface compliance**: Ensured ServiceProvider properly implements `di.ServiceProvider` interface
+- **Test reliability**: Fixed `locker_test.go` to work with new configuration system
+- **Build system**: Updated `go.mod` with proper dependencies and replace directives
+
+### Technical Improvements
+
+- Used compile-time interface checks instead of runtime type assertions
+- Improved error handling in provider setup
+- Enhanced documentation with configuration examples
+- Better separation between provider and manager responsibilities
+
 ## v0.0.3 - 2025-05-25
 
 ### Added

@@ -1,0 +1,32 @@
+# Scheduler Provider Configuration Sample
+# Package scheduler cung cấp giải pháp lên lịch và chạy các task định kỳ cho ứng dụng Go
+# Dựa trên thư viện go-co-op/gocron
+
+scheduler:
+  # Tự động khởi động scheduler khi ứng dụng boot
+  # ServiceProvider sẽ tự động gọi scheduler.StartAsync() trong Boot() method
+  auto_start: true
+
+  # Distributed locking configuration với Redis (tùy chọn)
+  # Chỉ cần thiết khi chạy scheduler trên nhiều instance trong môi trường phân tán
+  distributed_lock:
+    # Bật/tắt distributed locking
+    enabled: false
+    
+    # Redis client được lấy từ container thông qua container.MustMake(redis.client)
+    # Cần đảm bảo redis provider đã được đăng ký và cấu hình đúng
+  
+  # Cài đặt RedisLockerOptions cho distributed locking
+  # Sử dụng struct RedisLockerOptions từ code
+  options:
+    # Tiền tố key trong Redis (default: "scheduler_lock:")
+    key_prefix: "scheduler_lock:"
+    
+    # Thời gian lock tồn tại trước khi tự động hết hạn (default: 30s)
+    lock_duration: 30
+    
+    # Số lần thử lại tối đa khi không lấy được lock (default: 3)
+    max_retries: 3
+    
+    # Thời gian chờ giữa các lần thử lại (milliseconds, default: 100)
+    retry_delay: 100

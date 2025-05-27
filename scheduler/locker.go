@@ -10,35 +10,12 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// RedisLockerOptions chứa các tùy chọn cấu hình cho Redis Locker.
-type RedisLockerOptions struct {
-	// KeyPrefix là tiền tố được thêm vào trước mỗi khóa trong Redis
-	KeyPrefix string
-
-	// LockDuration là thời gian một khóa sẽ tồn tại trước khi tự động hết hạn
-	LockDuration time.Duration
-
-	// MaxRetries là số lần thử tối đa khi gặp lỗi khi tương tác với Redis
-	MaxRetries int
-
-	// RetryDelay là thời gian chờ giữa các lần thử
-	RetryDelay time.Duration
-}
-
-// DefaultRedisLockerOptions trả về các tùy chọn mặc định cho Redis Locker.
-func DefaultRedisLockerOptions() RedisLockerOptions {
-	return RedisLockerOptions{
-		KeyPrefix:    "scheduler_lock:",
-		LockDuration: 30 * time.Second,
-		MaxRetries:   3,
-		RetryDelay:   100 * time.Millisecond,
-	}
-}
+// RedisLockerOptions đã được di chuyển vào config.go
 
 // redisLocker triển khai gocron.Locker interface sử dụng Redis làm backend.
 type redisLocker struct {
 	client  *redis.Client
-	options RedisLockerOptions
+	options RedisLockerOptionsTime
 }
 
 // redisLock triển khai gocron.Lock interface.
@@ -80,6 +57,9 @@ func NewRedisLocker(client *redis.Client, opts ...RedisLockerOptions) (gocron.Lo
 		}
 	}
 
+	// Chuyển đổi options thành time.Duration
+	timeOptions := options.ToTimeDuration()
+
 	// Kiểm tra kết nối đến Redis
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -91,7 +71,7 @@ func NewRedisLocker(client *redis.Client, opts ...RedisLockerOptions) (gocron.Lo
 	// Tạo locker
 	locker := &redisLocker{
 		client:  client,
-		options: options,
+		options: timeOptions,
 	}
 
 	return locker, nil

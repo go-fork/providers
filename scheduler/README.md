@@ -4,20 +4,52 @@ Scheduler Provider là giải pháp lên lịch và chạy các task định k�
 
 ## Tính năng nổi bật
 
-- Tích hợp toàn bộ tính năng của thư viện gocron vào DI container của ứng dụng
-- Hỗ trợ nhiều loại lịch trình: theo khoảng thời gian, theo thời điểm cụ thể, biểu thức cron
-- Hỗ trợ chế độ singleton để tránh chạy song song cùng một task
-- Hỗ trợ distributed locking với Redis cho môi trường phân tán
-- Hỗ trợ tag để nhóm và quản lý các task
-- API fluent cho trải nghiệm lập trình dễ dàng
+- **Configuration-driven**: Hỗ trợ cấu hình qua file config với struct Config và RedisLockerOptions
+- **Auto-start**: Tự động khởi động scheduler khi ứng dụng boot (có thể tắt qua config)
+- **Distributed Locking**: Hỗ trợ distributed locking với Redis cho môi trường phân tán
+- **Fluent API**: API fluent cho trải nghiệm lập trình dễ dàng
+- **Tích hợp DI**: Tích hợp toàn bộ tính năng vào DI container của ứng dụng
+- **Multiple Schedule Types**: Hỗ trợ nhiều loại lịch trình (khoảng thời gian, thời điểm cụ thể, cron expressions)
+- **Singleton Mode**: Hỗ trợ chế độ singleton để tránh chạy song song cùng một task
+- **Task Management**: Hỗ trợ tag để nhóm và quản lý các task
 
 ## Cài đặt
-
-Để cài đặt Scheduler Provider, bạn có thể sử dụng lệnh go get:
 
 ```bash
 go get github.com/go-fork/providers/scheduler
 ```
+
+## Cấu hình
+
+### File cấu hình (config/app.yaml)
+
+```yaml
+scheduler:
+  # Tự động khởi động scheduler khi ứng dụng boot
+  auto_start: true
+
+  # Distributed locking với Redis (tùy chọn)
+  distributed_lock:
+    enabled: false
+  
+  # Cài đặt RedisLockerOptions cho distributed locking
+  options:
+    key_prefix: "scheduler_lock:"
+    lock_duration: 30      # seconds
+    max_retries: 3
+    retry_delay: 100       # milliseconds
+```
+
+### Các tùy chọn cấu hình
+
+| Field | Type | Mô tả | Mặc định |
+|-------|------|-------|----------|
+| `auto_start` | bool | Tự động khởi động scheduler trong Boot() | `true` |
+| `distributed_lock.enabled` | bool | Bật distributed locking với Redis | `false` |
+| `options.key_prefix` | string | Tiền tố key trong Redis | `"scheduler_lock:"` |
+| `options.lock_duration` | int | Thời gian lock (giây) | `30` |
+| `options.max_retries` | int | Số lần thử lại | `3` |
+| `options.retry_delay` | int | Thời gian chờ giữa các lần thử (ms) | `100` |
 
 ## Cách sử dụng
 
@@ -66,9 +98,65 @@ sched.Every(1).Hour().Tag("maintenance").Do(func() {
 })
 ```
 
-### 3. Sử dụng Distributed Locker với Redis
+### 3. Sử dụng Configuration-driven Scheduler
 
-Để đảm bảo task chỉ chạy một lần trong môi trường phân tán (nhiều instance của ứng dụng), bạn có thể sử dụng Redis Distributed Locker:
+Scheduler provider hỗ trợ cấu hình tự động thông qua file config. Khi có cấu hình distributed locking, provider sẽ tự động tạo và thiết lập Redis locker:
+
+```yaml
+# config/app.yaml
+scheduler:
+  auto_start: true
+  distributed_lock:
+    enabled: true
+  options:
+    key_prefix: "myapp_scheduler:"
+    lock_duration: 60      # seconds
+    max_retries: 5
+    retry_delay: 200       # milliseconds
+
+# Cần cả redis provider để kết nối Redis
+redis:
+  default:
+    addr: "localhost:6379"
+    password: ""
+    db: 0
+```
+
+```go
+import (
+    "github.com/go-fork/di"
+    "github.com/go-fork/providers/config"
+    "github.com/go-fork/providers/redis"
+    "github.com/go-fork/providers/scheduler"
+)
+
+func main() {
+    app := di.New()
+    
+    // Đăng ký các providers theo thứ tự phụ thuộc
+    app.Register(config.NewServiceProvider())
+    app.Register(redis.NewServiceProvider())  // Required cho distributed locking
+    app.Register(scheduler.NewServiceProvider())
+    
+    // Khởi động ứng dụng - scheduler sẽ tự động cấu hình distributed locking
+    app.Boot()
+    
+    // Sử dụng scheduler đã được cấu hình sẵn
+    container := app.Container()
+    sched := container.Get("scheduler").(scheduler.Manager)
+    
+    // Tất cả jobs sẽ tự động sử dụng distributed locking nếu được bật
+    sched.Every(5).Minutes().Do(func() {
+        fmt.Println("This task uses distributed locking automatically")
+    })
+    
+    select {}
+}
+```
+
+### 4. Sử dụng Manual Redis Locker (Tùy chọn)
+
+Nếu bạn muốn tự thiết lập Redis locker thay vì dùng config:
 
 ```go
 import (
@@ -83,18 +171,12 @@ redisClient := redis.NewClient(&redis.Options{
     DB:       0,
 })
 
-// Tạo Redis Locker với tùy chọn mặc định
-locker, err := scheduler.NewRedisLocker(redisClient)
-if err != nil {
-    log.Fatal(err)
-}
-
-// Hoặc với tùy chọn tùy chỉnh
+// Tạo Redis Locker với tùy chọn tùy chỉnh
 customLocker, err := scheduler.NewRedisLocker(redisClient, scheduler.RedisLockerOptions{
     KeyPrefix:    "myapp_scheduler:",
-    LockDuration: 60 * time.Second,
+    LockDuration: 60,   // seconds (int value)
     MaxRetries:   5,
-    RetryDelay:   200 * time.Millisecond,
+    RetryDelay:   200,  // milliseconds (int value)
 })
 if err != nil {
     log.Fatal(err)
@@ -102,10 +184,7 @@ if err != nil {
 
 // Thiết lập Redis Locker cho scheduler
 sched := container.Get("scheduler").(scheduler.Manager)
-sched.WithDistributedLocker(locker)
-
-// Từ bây giờ, tất cả các jobs sẽ sử dụng distributed locking với Redis
-// để đảm bảo chỉ chạy một lần trong môi trường phân tán
+sched.WithDistributedLocker(customLocker)
 ```
 
 Các tùy chọn cấu hình của Redis Locker:
@@ -113,11 +192,11 @@ Các tùy chọn cấu hình của Redis Locker:
 | Tùy chọn | Mô tả | Giá trị mặc định |
 |----------|-------|------------------|
 | KeyPrefix | Tiền tố được thêm vào trước mỗi khóa trong Redis | `scheduler_lock:` |
-| LockDuration | Thời gian một khóa sẽ tồn tại trước khi tự động hết hạn | `30 * time.Second` |
+| LockDuration | Thời gian một khóa sẽ tồn tại trước khi tự động hết hạn (giây) | `30` |
 | MaxRetries | Số lần thử tối đa khi gặp lỗi khi tương tác với Redis | `3` |
-| RetryDelay | Thời gian chờ giữa các lần thử | `100 * time.Millisecond` |
+| RetryDelay | Thời gian chờ giữa các lần thử (milliseconds) | `100` |
 
-### 4. Quản lý các task
+### 5. Quản lý các task
 
 ```go
 // Xóa task theo tag
@@ -133,7 +212,7 @@ sched.Stop()
 sched.Start()
 ```
 
-### 5. Tùy chỉnh Scheduler
+### 6. Tùy chỉnh Scheduler
 
 ```go
 // Đặt thời gian múi giờ cho scheduler

@@ -171,8 +171,5 @@ func TestNewServiceProvider(t *testing.T) {
 	}
 
 	// Kiểm tra provider implement đúng interface
-	_, ok := provider.(di.ServiceProvider)
-	if !ok {
-		t.Fatal("Provider does not implement di.ServiceProvider interface")
-	}
+	var _ di.ServiceProvider = provider
 }
