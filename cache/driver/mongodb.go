@@ -24,6 +24,8 @@ type MongoCacheItem struct {
 
 type MongoDBDriver interface {
 	Driver
+	// ensureIndexes tạo các index cần thiết cho MongoDB collection.
+	ensureIndexes(ctx context.Context) error
 }
 
 // mongoDBDriver cài đặt cache driver sử dụng MongoDB.
@@ -52,12 +54,71 @@ type mongoDBDriver struct {
 //   - *MongoDBDriver: Driver đã được khởi tạo
 //   - error: Lỗi nếu không thể kết nối đến MongoDB hoặc tạo indices
 func NewMongoDBDriver(cfg config.DriverMongodbConfig, manager mongodb.Manager) (MongoDBDriver, error) {
-	return &mongoDBDriver{
+	driver := &mongoDBDriver{
 		mongodb:    &manager,
 		config:     cfg,
 		database:   manager.DatabaseWithName(cfg.Database),
 		collection: manager.DatabaseWithName(cfg.Database).Collection(cfg.Collection),
-	}, nil
+	}
+
+	// Tạo indices cần thiết
+	if err := driver.ensureIndexes(context.Background()); err != nil {
+		return nil, err
+	}
+
+	return driver, nil
+}
+
+// ensureIndexes tạo các index cần thiết cho MongoDB collection.
+//
+// Phương thức này tạo TTL index trên trường expiration để MongoDB tự động
+// xóa các document đã hết hạn. TTL index kiểm tra các document có expiration > 0
+// và xóa chúng khi thời gian hiện tại vượt quá giá trị expiration.
+//
+// Params:
+//   - ctx: Context để kiểm soát thời gian thực thi của thao tác
+//
+// Returns:
+//   - error: Lỗi nếu có trong quá trình tạo index
+func (d *mongoDBDriver) ensureIndexes(ctx context.Context) error {
+	// Tạo TTL index trên trường expiration
+	// Index này sẽ tự động xóa documents khi expiration time đến
+	indexModel := mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "expiration", Value: 1}, // Index trên trường expiration
+		},
+		Options: options.Index().
+			SetExpireAfterSeconds(0). // TTL index với 0 seconds để sử dụng giá trị trong document
+			SetPartialFilterExpression(bson.D{
+				{Key: "expiration", Value: bson.D{{Key: "$gt", Value: 0}}}, // Chỉ áp dụng cho document có expiration > 0
+			}).
+			SetName("cache_expiration_ttl"), // Tên index
+	}
+
+	// Tạo index
+	_, err := d.collection.Indexes().CreateOne(ctx, indexModel)
+	if err != nil {
+		return err
+	}
+
+	// Tạo index cho _id nếu chưa có (thường MongoDB tự tạo)
+	// Nhưng đảm bảo performance cho cache key lookups
+	keyIndexModel := mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "_id", Value: 1},
+		},
+		Options: options.Index().
+			SetName("cache_key_index"),
+	}
+
+	_, err = d.collection.Indexes().CreateOne(ctx, keyIndexModel)
+	if err != nil {
+		// Ignore error nếu index đã tồn tại
+		if !mongo.IsDuplicateKeyError(err) {
+			return err
+		}
+	}
+	return nil
 }
 
 // Get lấy một giá trị từ cache.
@@ -86,11 +147,11 @@ func (d *mongoDBDriver) Get(ctx context.Context, key string) (interface{}, bool)
 		return nil, false
 	}
 
-	// Kiểm tra expiration
+	// Kiểm tra expiration (TTL index sẽ tự động xóa expired documents,
+	// nhưng chúng ta vẫn kiểm tra để đảm bảo tính nhất quán)
 	if cacheItem.Expiration > 0 && time.Now().UnixNano() > cacheItem.Expiration {
 		d.config.Misses++
-		// Xóa item đã hết hạn
-		d.collection.DeleteOne(ctx, bson.M{"_id": key})
+		// TTL index sẽ tự động xóa, không cần xóa thủ công
 		return nil, false
 	}
 
