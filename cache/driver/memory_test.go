@@ -1,892 +1,532 @@
-package driver
+package driver_test
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"testing"
 	"time"
+
+	"github.com/go-fork/providers/cache/config"
+	"github.com/go-fork/providers/cache/driver"
+	cacheMocks "github.com/go-fork/providers/cache/mocks"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/suite"
 )
 
-func TestMemoryDriverGet(t *testing.T) {
-	t.Run("returns value when key exists and not expired", func(t *testing.T) {
-		// Arrange
-		d := NewMemoryDriver()
-		ctx := context.Background()
-		key := "test-key"
-		value := "test-value"
-
-		err := d.Set(ctx, key, value, 1*time.Hour)
-		if err != nil {
-			t.Fatalf("Failed to set value: %v", err)
-		}
-
-		// Act
-		result, found := d.Get(ctx, key)
-
-		// Assert
-		if !found {
-			t.Errorf("Expected to find key, but didn't")
-		}
-		if result != value {
-			t.Errorf("Expected value to be %v, got %v", value, result)
-		}
-	})
-
-	t.Run("returns not found when key doesn't exist", func(t *testing.T) {
-		// Arrange
-		d := NewMemoryDriver()
-		ctx := context.Background()
-
-		// Act
-		_, found := d.Get(ctx, "nonexistent-key")
-
-		// Assert
-		if found {
-			t.Errorf("Expected not to find key, but did")
-		}
-	})
-
-	t.Run("returns not found when key is expired", func(t *testing.T) {
-		// Arrange
-		d := NewMemoryDriver()
-		ctx := context.Background()
-		key := "test-key"
-		value := "test-value"
-
-		// Set with very short TTL to make it expire
-		err := d.Set(ctx, key, value, 100*time.Millisecond)
-		if err != nil {
-			t.Fatalf("Failed to set value: %v", err)
-		}
-
-		// Wait for it to expire
-		time.Sleep(200 * time.Millisecond)
-
-		// Act
-		_, found := d.Get(ctx, key)
-
-		// Assert
-		if found {
-			t.Errorf("Expected not to find expired key, but did")
-		}
-	})
+type MemoryDriverTestSuite struct {
+	suite.Suite
+	ctx    context.Context
+	driver driver.MemoryDriver
+	config config.DriverMemoryConfig
 }
 
-func TestMemoryDriverSet(t *testing.T) {
-	t.Run("sets value successfully", func(t *testing.T) {
-		// Arrange
-		d := NewMemoryDriver()
-		ctx := context.Background()
-		key := "test-key"
-		value := "test-value"
-
-		// Act
-		err := d.Set(ctx, key, value, 1*time.Hour)
-
-		// Assert
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
-
-		result, found := d.Get(ctx, key)
-		if !found {
-			t.Errorf("Expected to find key, but didn't")
-		}
-		if result != value {
-			t.Errorf("Expected value to be %v, got %v", value, result)
-		}
-	})
-
-	t.Run("overwrites existing value", func(t *testing.T) {
-		// Arrange
-		d := NewMemoryDriver()
-		ctx := context.Background()
-		key := "test-key"
-		value1 := "test-value-1"
-		value2 := "test-value-2"
-
-		// Set initial value
-		err := d.Set(ctx, key, value1, 1*time.Hour)
-		if err != nil {
-			t.Fatalf("Failed to set value: %v", err)
-		}
-
-		// Act - overwrite
-		err = d.Set(ctx, key, value2, 1*time.Hour)
-
-		// Assert
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
-
-		result, found := d.Get(ctx, key)
-		if !found {
-			t.Errorf("Expected to find key, but didn't")
-		}
-		if result != value2 {
-			t.Errorf("Expected value to be %v, got %v", value2, result)
-		}
-	})
-
-	t.Run("sets value with infinite TTL when negative", func(t *testing.T) {
-		// Arrange
-		d := NewMemoryDriver()
-		ctx := context.Background()
-		key := "test-key"
-		value := "test-value"
-
-		// Act
-		err := d.Set(ctx, key, value, -1*time.Hour)
-
-		// Assert
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
-
-		result, found := d.Get(ctx, key)
-		if !found {
-			t.Errorf("Expected to find key, but didn't")
-		}
-		if result != value {
-			t.Errorf("Expected value to be %v, got %v", value, result)
-		}
-	})
-
-	t.Run("sets complex value types", func(t *testing.T) {
-		// Arrange
-		d := NewMemoryDriver()
-		ctx := context.Background()
-		key := "test-key"
-		value := map[string]interface{}{
-			"name":  "Test User",
-			"age":   30,
-			"roles": []string{"admin", "user"},
-		}
-
-		// Act
-		err := d.Set(ctx, key, value, 1*time.Hour)
-
-		// Assert
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
-
-		result, found := d.Get(ctx, key)
-		if !found {
-			t.Errorf("Expected to find key, but didn't")
-		}
-
-		resultMap, ok := result.(map[string]interface{})
-		if !ok {
-			t.Errorf("Expected result to be map[string]interface{}, got %T", result)
-		} else {
-			if resultMap["name"] != value["name"] {
-				t.Errorf("Expected name to be %v, got %v", value["name"], resultMap["name"])
-			}
-			if resultMap["age"] != value["age"] {
-				t.Errorf("Expected age to be %v, got %v", value["age"], resultMap["age"])
-			}
-		}
-	})
+func (suite *MemoryDriverTestSuite) SetupSuite() {
+	suite.ctx = context.Background()
 }
 
-func TestMemoryDriverHas(t *testing.T) {
-	t.Run("returns true when key exists and not expired", func(t *testing.T) {
-		// Arrange
-		d := NewMemoryDriver()
-		ctx := context.Background()
-		key := "test-key"
-
-		err := d.Set(ctx, key, "test-value", 1*time.Hour)
-		if err != nil {
-			t.Fatalf("Failed to set value: %v", err)
-		}
-
-		// Act
-		exists := d.Has(ctx, key)
-
-		// Assert
-		if !exists {
-			t.Errorf("Expected key to exist, but it doesn't")
-		}
-	})
-
-	t.Run("returns false when key doesn't exist", func(t *testing.T) {
-		// Arrange
-		d := NewMemoryDriver()
-		ctx := context.Background()
-
-		// Act
-		exists := d.Has(ctx, "nonexistent-key")
-
-		// Assert
-		if exists {
-			t.Errorf("Expected key not to exist, but it does")
-		}
-	})
-
-	t.Run("returns false when key is expired", func(t *testing.T) {
-		// Arrange
-		d := NewMemoryDriver()
-		ctx := context.Background()
-		key := "test-key"
-
-		// Set with short TTL to make it expire
-		err := d.Set(ctx, key, "test-value", 100*time.Millisecond)
-		if err != nil {
-			t.Fatalf("Failed to set value: %v", err)
-		}
-
-		// Wait for it to expire
-		time.Sleep(200 * time.Millisecond)
-
-		// Act
-		exists := d.Has(ctx, key)
-
-		// Assert
-		if exists {
-			t.Errorf("Expected expired key not to exist, but it does")
-		}
-	})
+func (suite *MemoryDriverTestSuite) SetupTest() {
+	suite.config = config.DriverMemoryConfig{
+		DefaultTTL:      300, // 5 minutes
+		CleanupInterval: 600, // 10 minutes
+	}
 }
 
-func TestMemoryDriverDelete(t *testing.T) {
-	t.Run("deletes existing key", func(t *testing.T) {
-		// Arrange
-		d := NewMemoryDriver()
-		ctx := context.Background()
-		key := "test-key"
-
-		err := d.Set(ctx, key, "test-value", 1*time.Hour)
-		if err != nil {
-			t.Fatalf("Failed to set value: %v", err)
-		}
-
-		// Act
-		err = d.Delete(ctx, key)
-
-		// Assert
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
-
-		exists := d.Has(ctx, key)
-		if exists {
-			t.Errorf("Expected key to be deleted, but it still exists")
-		}
-	})
-
-	t.Run("doesn't error when key doesn't exist", func(t *testing.T) {
-		// Arrange
-		d := NewMemoryDriver()
-		ctx := context.Background()
-
-		// Act
-		err := d.Delete(ctx, "nonexistent-key")
-
-		// Assert
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
-	})
+func (suite *MemoryDriverTestSuite) TearDownTest() {
+	if suite.driver != nil {
+		suite.driver.Close()
+	}
 }
 
-func TestMemoryDriverFlush(t *testing.T) {
-	t.Run("removes all keys", func(t *testing.T) {
-		// Arrange
-		d := NewMemoryDriver()
-		ctx := context.Background()
+func (suite *MemoryDriverTestSuite) TestNewMemoryDriver_Success() {
+	// Act
+	memoryDriver := driver.NewMemoryDriver(suite.config)
 
-		// Set multiple keys
-		keys := []string{"key1", "key2", "key3"}
-		for _, key := range keys {
-			err := d.Set(ctx, key, "value-"+key, 1*time.Hour)
-			if err != nil {
-				t.Fatalf("Failed to set value: %v", err)
-			}
-		}
-
-		// Verify keys exist
-		for _, key := range keys {
-			if !d.Has(ctx, key) {
-				t.Fatalf("Expected key %s to exist before flush", key)
-			}
-		}
-
-		// Act
-		err := d.Flush(ctx)
-
-		// Assert
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
-
-		// Verify all keys are gone
-		for _, key := range keys {
-			if d.Has(ctx, key) {
-				t.Errorf("Expected key %s to be deleted after flush", key)
-			}
-		}
-	})
-
-	t.Run("does nothing when cache is empty", func(t *testing.T) {
-		// Arrange
-		d := NewMemoryDriver()
-		ctx := context.Background()
-
-		// Act
-		err := d.Flush(ctx)
-
-		// Assert
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
-	})
+	// Assert
+	assert.NotNil(suite.T(), memoryDriver)
+	suite.driver = memoryDriver
 }
 
-func TestMemoryDriverGetMultiple(t *testing.T) {
-	t.Run("gets multiple existing keys", func(t *testing.T) {
-		// Arrange
-		d := NewMemoryDriver()
-		ctx := context.Background()
+func (suite *MemoryDriverTestSuite) TestNewMemoryDriver_NoCleanup() {
+	// Arrange
+	noCleanupConfig := suite.config
+	noCleanupConfig.CleanupInterval = 0
 
-		// Set multiple keys
-		keyValues := map[string]string{
+	// Act
+	memoryDriver := driver.NewMemoryDriver(noCleanupConfig)
+
+	// Assert
+	assert.NotNil(suite.T(), memoryDriver)
+	suite.driver = memoryDriver
+}
+
+func TestMemoryDriverIntegration(t *testing.T) {
+	ctx := context.Background()
+
+	memoryConfig := config.DriverMemoryConfig{
+		DefaultTTL:      10, // 10 seconds for faster tests
+		CleanupInterval: 5,  // 5 seconds cleanup
+	}
+
+	memoryDriver := driver.NewMemoryDriver(memoryConfig)
+	defer memoryDriver.Close()
+
+	t.Run("Set and Get", func(t *testing.T) {
+		key := "test:key"
+		value := map[string]interface{}{"name": "test", "value": 123}
+
+		// Set value
+		err := memoryDriver.Set(ctx, key, value, 0)
+		assert.NoError(t, err)
+
+		// Get value
+		result, found := memoryDriver.Get(ctx, key)
+		assert.True(t, found)
+		assert.Equal(t, value, result)
+	})
+
+	t.Run("Has", func(t *testing.T) {
+		key := "test:has"
+		value := "test_value"
+
+		// Initially should not exist
+		exists := memoryDriver.Has(ctx, key)
+		assert.False(t, exists)
+
+		// Set value
+		err := memoryDriver.Set(ctx, key, value, 0)
+		assert.NoError(t, err)
+
+		// Now should exist
+		exists = memoryDriver.Has(ctx, key)
+		assert.True(t, exists)
+	})
+
+	t.Run("Delete", func(t *testing.T) {
+		key := "test:delete"
+		value := "test_value"
+
+		// Set value
+		err := memoryDriver.Set(ctx, key, value, 0)
+		assert.NoError(t, err)
+
+		// Verify exists
+		exists := memoryDriver.Has(ctx, key)
+		assert.True(t, exists)
+
+		// Delete
+		err = memoryDriver.Delete(ctx, key)
+		assert.NoError(t, err)
+
+		// Verify deleted
+		exists = memoryDriver.Has(ctx, key)
+		assert.False(t, exists)
+	})
+
+	t.Run("SetMultiple and GetMultiple", func(t *testing.T) {
+		values := map[string]interface{}{
 			"key1": "value1",
 			"key2": "value2",
 			"key3": "value3",
 		}
 
-		for key, value := range keyValues {
-			err := d.Set(ctx, key, value, 1*time.Hour)
-			if err != nil {
-				t.Fatalf("Failed to set value: %v", err)
-			}
-		}
+		// Set multiple
+		err := memoryDriver.SetMultiple(ctx, values, 0)
+		assert.NoError(t, err)
 
-		// Act
-		values, missing := d.GetMultiple(ctx, []string{"key1", "key2", "key4"})
+		// Get multiple
+		keys := []string{"key1", "key2", "key3", "key4"} // key4 doesn't exist
+		results, missed := memoryDriver.GetMultiple(ctx, keys)
 
-		// Assert
-		if len(values) != 2 {
-			t.Errorf("Expected 2 values, got %d", len(values))
-		}
-
-		if values["key1"] != "value1" {
-			t.Errorf("Expected key1 value to be %v, got %v", "value1", values["key1"])
-		}
-
-		if values["key2"] != "value2" {
-			t.Errorf("Expected key2 value to be %v, got %v", "value2", values["key2"])
-		}
-
-		if len(missing) != 1 || missing[0] != "key4" {
-			t.Errorf("Expected missing keys to be [key4], got %v", missing)
-		}
+		assert.Len(t, results, 3)
+		assert.Len(t, missed, 1)
+		assert.Contains(t, missed, "key4")
+		assert.Equal(t, "value1", results["key1"])
+		assert.Equal(t, "value2", results["key2"])
+		assert.Equal(t, "value3", results["key3"])
 	})
 
-	t.Run("returns empty map and all keys as missing when no keys exist", func(t *testing.T) {
-		// Arrange
-		d := NewMemoryDriver()
-		ctx := context.Background()
-		keys := []string{"key1", "key2", "key3"}
-
-		// Act
-		values, missing := d.GetMultiple(ctx, keys)
-
-		// Assert
-		if len(values) != 0 {
-			t.Errorf("Expected 0 values, got %d", len(values))
-		}
-
-		if len(missing) != len(keys) {
-			t.Errorf("Expected %d missing keys, got %d", len(keys), len(missing))
-		}
-
-		// Check all requested keys are in missing
-		missingMap := make(map[string]bool)
-		for _, key := range missing {
-			missingMap[key] = true
-		}
-
-		for _, key := range keys {
-			if !missingMap[key] {
-				t.Errorf("Expected key %s to be in missing keys", key)
-			}
-		}
-	})
-
-	t.Run("skips expired keys", func(t *testing.T) {
-		// Arrange
-		d := NewMemoryDriver()
-		ctx := context.Background()
-
-		// Set one expired key
-		err := d.Set(ctx, "expired", "value", 100*time.Millisecond)
-		if err != nil {
-			t.Fatalf("Failed to set value: %v", err)
-		}
-
-		// Wait for it to expire
-		time.Sleep(200 * time.Millisecond)
-
-		// Set one valid key
-		err = d.Set(ctx, "valid", "value", 1*time.Hour)
-		if err != nil {
-			t.Fatalf("Failed to set value: %v", err)
-		}
-
-		// Act
-		values, missing := d.GetMultiple(ctx, []string{"expired", "valid"})
-
-		// Assert
-		if len(values) != 1 {
-			t.Errorf("Expected 1 value, got %d", len(values))
-		}
-
-		if _, ok := values["valid"]; !ok {
-			t.Errorf("Expected 'valid' key to be in values")
-		}
-
-		if len(missing) != 1 || missing[0] != "expired" {
-			t.Errorf("Expected missing keys to be [expired], got %v", missing)
-		}
-	})
-}
-
-func TestMemoryDriverSetMultiple(t *testing.T) {
-	t.Run("sets multiple values", func(t *testing.T) {
-		// Arrange
-		d := NewMemoryDriver()
-		ctx := context.Background()
+	t.Run("DeleteMultiple", func(t *testing.T) {
 		values := map[string]interface{}{
-			"key1": "value1",
-			"key2": 42,
-			"key3": map[string]string{"nested": "value"},
+			"del1": "value1",
+			"del2": "value2",
+			"del3": "value3",
 		}
 
-		// Act
-		err := d.SetMultiple(ctx, values, 1*time.Hour)
+		// Set multiple
+		err := memoryDriver.SetMultiple(ctx, values, 0)
+		assert.NoError(t, err)
 
-		// Assert
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
+		// Delete multiple
+		keys := []string{"del1", "del2"}
+		err = memoryDriver.DeleteMultiple(ctx, keys)
+		assert.NoError(t, err)
 
-		// Verify all keys were set
-		for key, expectedValue := range values {
-			value, found := d.Get(ctx, key)
-			if !found {
-				t.Errorf("Expected key %s to exist", key)
-				continue
-			}
-
-			// For complex types like maps, we need to check more carefully
-			switch key {
-			case "key3":
-				nestedMap, ok := value.(map[string]string)
-				if !ok {
-					t.Errorf("Expected key3 value to be map[string]string, got %T", value)
-				} else if nestedMap["nested"] != "value" {
-					t.Errorf("Expected nested value to be 'value', got %v", nestedMap["nested"])
-				}
-			default:
-				if value != expectedValue {
-					t.Errorf("Expected key %s value to be %v, got %v", key, expectedValue, value)
-				}
-			}
-		}
+		// Verify deletion
+		assert.False(t, memoryDriver.Has(ctx, "del1"))
+		assert.False(t, memoryDriver.Has(ctx, "del2"))
+		assert.True(t, memoryDriver.Has(ctx, "del3")) // Should still exist
 	})
 
-	t.Run("does nothing with empty map", func(t *testing.T) {
-		// Arrange
-		d := NewMemoryDriver()
-		ctx := context.Background()
-		values := map[string]interface{}{}
-
-		// Act
-		err := d.SetMultiple(ctx, values, 1*time.Hour)
-
-		// Assert
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
-	})
-
-	t.Run("overwrites existing values", func(t *testing.T) {
-		// Arrange
-		d := NewMemoryDriver()
-		ctx := context.Background()
-
-		// Set initial values
-		initial := map[string]interface{}{
-			"key1": "old1",
-			"key2": "old2",
-		}
-
-		err := d.SetMultiple(ctx, initial, 1*time.Hour)
-		if err != nil {
-			t.Fatalf("Failed to set initial values: %v", err)
-		}
-
-		// New values to overwrite
-		updated := map[string]interface{}{
-			"key1": "new1",
-			"key3": "new3",
-		}
-
-		// Act
-		err = d.SetMultiple(ctx, updated, 2*time.Hour)
-
-		// Assert
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
-
-		// key1 should be updated
-		value1, found := d.Get(ctx, "key1")
-		if !found {
-			t.Errorf("Expected key1 to exist")
-		} else if value1 != "new1" {
-			t.Errorf("Expected key1 value to be 'new1', got %v", value1)
-		}
-
-		// key2 should remain unchanged
-		value2, found := d.Get(ctx, "key2")
-		if !found {
-			t.Errorf("Expected key2 to exist")
-		} else if value2 != "old2" {
-			t.Errorf("Expected key2 value to be 'old2', got %v", value2)
-		}
-
-		// key3 should be added
-		value3, found := d.Get(ctx, "key3")
-		if !found {
-			t.Errorf("Expected key3 to exist")
-		} else if value3 != "new3" {
-			t.Errorf("Expected key3 value to be 'new3', got %v", value3)
-		}
-	})
-}
-
-func TestMemoryDriverDeleteMultiple(t *testing.T) {
-	t.Run("deletes multiple existing keys", func(t *testing.T) {
-		// Arrange
-		d := NewMemoryDriver()
-		ctx := context.Background()
-
-		// Set multiple keys
-		keys := []string{"key1", "key2", "key3"}
-		for _, key := range keys {
-			err := d.Set(ctx, key, "value-"+key, 1*time.Hour)
-			if err != nil {
-				t.Fatalf("Failed to set value: %v", err)
-			}
-		}
-
-		// Verify keys exist
-		for _, key := range keys {
-			if !d.Has(ctx, key) {
-				t.Fatalf("Expected key %s to exist before delete", key)
-			}
-		}
-
-		// Act
-		err := d.DeleteMultiple(ctx, []string{"key1", "key3"})
-
-		// Assert
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
-
-		// key1 and key3 should be deleted
-		if d.Has(ctx, "key1") {
-			t.Errorf("Expected key1 to be deleted")
-		}
-		if d.Has(ctx, "key3") {
-			t.Errorf("Expected key3 to be deleted")
-		}
-
-		// key2 should still exist
-		if !d.Has(ctx, "key2") {
-			t.Errorf("Expected key2 to still exist")
-		}
-	})
-
-	t.Run("doesn't error when keys don't exist", func(t *testing.T) {
-		// Arrange
-		d := NewMemoryDriver()
-		ctx := context.Background()
-
-		// Act
-		err := d.DeleteMultiple(ctx, []string{"nonexistent1", "nonexistent2"})
-
-		// Assert
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
-	})
-
-	t.Run("doesn't error with empty key list", func(t *testing.T) {
-		// Arrange
-		d := NewMemoryDriver()
-		ctx := context.Background()
-
-		// Act
-		err := d.DeleteMultiple(ctx, []string{})
-
-		// Assert
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
-	})
-}
-
-func TestMemoryDriverRemember(t *testing.T) {
-	t.Run("returns existing value when key exists", func(t *testing.T) {
-		// Arrange
-		d := NewMemoryDriver()
-		ctx := context.Background()
-		key := "test-key"
-		existingValue := "existing-value"
-
-		err := d.Set(ctx, key, existingValue, 1*time.Hour)
-		if err != nil {
-			t.Fatalf("Failed to set value: %v", err)
-		}
-
+	t.Run("Remember", func(t *testing.T) {
+		key := "test:remember"
+		expectedValue := "computed_value"
 		callbackCalled := false
+
 		callback := func() (interface{}, error) {
 			callbackCalled = true
-			return "callback-value", nil
+			return expectedValue, nil
 		}
 
-		// Act
-		value, err := d.Remember(ctx, key, 1*time.Hour, callback)
+		// First call should execute callback
+		result, err := memoryDriver.Remember(ctx, key, 0, callback)
+		assert.NoError(t, err)
+		assert.Equal(t, expectedValue, result)
+		assert.True(t, callbackCalled)
 
-		// Assert
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
-		if value != existingValue {
-			t.Errorf("Expected value to be %v, got %v", existingValue, value)
-		}
-		if callbackCalled {
-			t.Errorf("Expected callback not to be called, but it was")
-		}
+		// Reset flag
+		callbackCalled = false
+
+		// Second call should use cache
+		result, err = memoryDriver.Remember(ctx, key, 0, callback)
+		assert.NoError(t, err)
+		assert.Equal(t, expectedValue, result)
+		assert.False(t, callbackCalled) // Callback should not be called
 	})
 
-	t.Run("calls callback and stores value when key doesn't exist", func(t *testing.T) {
-		// Arrange
-		d := NewMemoryDriver()
-		ctx := context.Background()
-		key := "test-key"
-		callbackValue := "callback-value"
+	t.Run("Stats", func(t *testing.T) {
+		// Set some test data
+		memoryDriver.Set(ctx, "stats1", "value1", 0)
+		memoryDriver.Set(ctx, "stats2", "value2", 0)
 
-		callbackCalled := false
-		callback := func() (interface{}, error) {
-			callbackCalled = true
-			return callbackValue, nil
-		}
+		stats := memoryDriver.Stats(ctx)
 
-		// Act
-		value, err := d.Remember(ctx, key, 1*time.Hour, callback)
-
-		// Assert
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
-		if value != callbackValue {
-			t.Errorf("Expected value to be %v, got %v", callbackValue, value)
-		}
-		if !callbackCalled {
-			t.Errorf("Expected callback to be called, but it wasn't")
-		}
-
-		// Verify value was stored in cache
-		cachedValue, found := d.Get(ctx, key)
-		if !found {
-			t.Errorf("Expected key to be stored in cache, but it wasn't")
-		}
-		if cachedValue != callbackValue {
-			t.Errorf("Expected cached value to be %v, got %v", callbackValue, cachedValue)
-		}
+		assert.Contains(t, stats, "count")
+		assert.Contains(t, stats, "hits")
+		assert.Contains(t, stats, "misses")
+		assert.Contains(t, stats, "type")
+		assert.Equal(t, "memory", stats["type"])
+		assert.GreaterOrEqual(t, stats["count"], 2) // At least 2 items
 	})
 
-	t.Run("returns error when callback returns error", func(t *testing.T) {
-		// Arrange
-		d := NewMemoryDriver()
-		ctx := context.Background()
-		key := "test-key"
-		expectedErr := errors.New("callback error")
+	t.Run("Flush", func(t *testing.T) {
+		// Set some test data
+		memoryDriver.Set(ctx, "flush1", "value1", 0)
+		memoryDriver.Set(ctx, "flush2", "value2", 0)
 
-		callback := func() (interface{}, error) {
-			return nil, expectedErr
-		}
-
-		// Act
-		_, err := d.Remember(ctx, key, 1*time.Hour, callback)
-
-		// Assert
-		if err != expectedErr {
-			t.Errorf("Expected error %v, got %v", expectedErr, err)
-		}
-
-		// Verify key was not stored
-		_, found := d.Get(ctx, key)
-		if found {
-			t.Errorf("Expected key not to be stored when callback errors")
-		}
-	})
-
-	t.Run("calls callback when key exists but is expired", func(t *testing.T) {
-		// Arrange
-		d := NewMemoryDriver()
-		ctx := context.Background()
-		key := "test-key"
-		existingValue := "existing-value"
-		callbackValue := "callback-value"
-
-		// Set with a short TTL to make it expire
-		err := d.Set(ctx, key, existingValue, 100*time.Millisecond)
-		if err != nil {
-			t.Fatalf("Failed to set value: %v", err)
-		}
-
-		// Wait for it to expire
-		time.Sleep(200 * time.Millisecond)
-		if err != nil {
-			t.Fatalf("Failed to set value: %v", err)
-		}
-
-		callbackCalled := false
-		callback := func() (interface{}, error) {
-			callbackCalled = true
-			return callbackValue, nil
-		}
-
-		// Act
-		value, err := d.Remember(ctx, key, 1*time.Hour, callback)
-
-		// Assert
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
-		if value != callbackValue {
-			t.Errorf("Expected value to be %v, got %v", callbackValue, value)
-		}
-		if !callbackCalled {
-			t.Errorf("Expected callback to be called, but it wasn't")
-		}
-	})
-}
-
-func TestMemoryDriverStats(t *testing.T) {
-	t.Run("returns correct stats", func(t *testing.T) {
-		// Arrange
-		d := NewMemoryDriver()
-		ctx := context.Background()
-
-		// Set some keys
-		d.Set(ctx, "key1", "value1", 1*time.Hour)
-		d.Set(ctx, "key2", "value2", 1*time.Hour)
-		d.Set(ctx, "key3", "value3", -1*time.Second) // Expired immediately
-
-		// Act
-		stats := d.Stats(ctx)
-
-		// Assert
-		if stats["type"] != "memory" {
-			t.Errorf("Expected driver to be 'memory', got %v", stats["type"])
-		}
-
-		// Should have 3 items (MemoryDriver doesn't automatically cleanup expired items until janitor runs)
-		if stats["count"] != 3 {
-			t.Errorf("Expected 3 items, got %v", stats["count"])
-		}
-	})
-
-	t.Run("reflects changes in cache", func(t *testing.T) {
-		// Arrange
-		d := NewMemoryDriver()
-		ctx := context.Background()
-
-		// Initially empty
-		initialStats := d.Stats(ctx)
-		if initialStats["count"] != 0 {
-			t.Errorf("Expected 0 items initially, got %v", initialStats["count"])
-		}
-
-		// Add some items
-		d.Set(ctx, "key1", "value1", 1*time.Hour)
-		d.Set(ctx, "key2", "value2", 1*time.Hour)
-
-		// Check after adding
-		afterAddStats := d.Stats(ctx)
-		if afterAddStats["count"] != 2 {
-			t.Errorf("Expected 2 items after adding, got %v", afterAddStats["count"])
-		}
-
-		// Delete an item
-		d.Delete(ctx, "key1")
-
-		// Check after deleting
-		afterDeleteStats := d.Stats(ctx)
-		if afterDeleteStats["count"] != 1 {
-			t.Errorf("Expected 1 item after deleting, got %v", afterDeleteStats["count"])
-		}
+		// Verify data exists
+		assert.True(t, memoryDriver.Has(ctx, "flush1"))
+		assert.True(t, memoryDriver.Has(ctx, "flush2"))
 
 		// Flush
-		d.Flush(ctx)
+		err := memoryDriver.Flush(ctx)
+		assert.NoError(t, err)
 
-		// Check after flushing
-		afterFlushStats := d.Stats(ctx)
-		if afterFlushStats["count"] != 0 {
-			t.Errorf("Expected 0 items after flushing, got %v", afterFlushStats["count"])
-		}
+		// Verify data is gone
+		assert.False(t, memoryDriver.Has(ctx, "flush1"))
+		assert.False(t, memoryDriver.Has(ctx, "flush2"))
 	})
-}
 
-func TestMemoryDriverClose(t *testing.T) {
-	t.Run("returns nil", func(t *testing.T) {
-		// Arrange
-		d := NewMemoryDriver()
+	t.Run("TTL Expiration", func(t *testing.T) {
+		key := "test:ttl"
+		value := "test_value"
 
-		// Act
-		err := d.Close()
+		// Set with short TTL
+		err := memoryDriver.Set(ctx, key, value, 500*time.Millisecond)
+		assert.NoError(t, err)
 
-		// Assert
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
-	})
-}
-
-func TestMemoryDriverExpiration(t *testing.T) {
-	t.Run("auto-expires items", func(t *testing.T) {
-		// Arrange
-		d := NewMemoryDriver()
-		ctx := context.Background()
-		key := "test-key"
-		value := "test-value"
-
-		// Set with very short TTL
-		err := d.Set(ctx, key, value, 50*time.Millisecond)
-		if err != nil {
-			t.Fatalf("Failed to set value: %v", err)
-		}
-
-		// Verify key exists immediately
-		if !d.Has(ctx, key) {
-			t.Fatalf("Expected key to exist immediately after setting")
-		}
+		// Should exist immediately
+		result, found := memoryDriver.Get(ctx, key)
+		assert.True(t, found)
+		assert.Equal(t, value, result)
 
 		// Wait for expiration
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(600 * time.Millisecond)
 
-		// Act & Assert
-		if d.Has(ctx, key) {
-			t.Errorf("Expected key to be expired, but it still exists")
+		// Should no longer exist
+		_, found = memoryDriver.Get(ctx, key)
+		assert.False(t, found)
+	})
+
+	t.Run("Item Expired Method", func(t *testing.T) {
+		// Test Item.Expired() method directly
+		now := time.Now()
+
+		// Item with no expiration
+		item1 := driver.Item{
+			Value:      "test",
+			Expiration: 0,
+		}
+		assert.False(t, item1.Expired())
+
+		// Item that expired
+		item2 := driver.Item{
+			Value:      "test",
+			Expiration: now.Add(-1 * time.Hour).UnixNano(),
+		}
+		assert.True(t, item2.Expired())
+
+		// Item not yet expired
+		item3 := driver.Item{
+			Value:      "test",
+			Expiration: now.Add(1 * time.Hour).UnixNano(),
+		}
+		assert.False(t, item3.Expired())
+	})
+
+	t.Run("Automatic Cleanup", func(t *testing.T) {
+		// Create driver with very short cleanup interval
+		quickCleanupConfig := config.DriverMemoryConfig{
+			DefaultTTL:      1, // 1 second
+			CleanupInterval: 1, // 1 second cleanup
+		}
+		quickDriver := driver.NewMemoryDriver(quickCleanupConfig)
+		defer quickDriver.Close()
+
+		// Set item with short TTL
+		key := "cleanup:test"
+		err := quickDriver.Set(ctx, key, "value", 500*time.Millisecond)
+		assert.NoError(t, err)
+
+		// Verify exists
+		assert.True(t, quickDriver.Has(ctx, key))
+
+		// Wait for automatic cleanup
+		time.Sleep(2 * time.Second)
+
+		// Item should be cleaned up automatically
+		_, found := quickDriver.Get(ctx, key)
+		assert.False(t, found)
+	})
+}
+
+func TestMemoryDriverMocked(t *testing.T) {
+	mockDriver := cacheMocks.NewMockDriver(t)
+	ctx := context.Background()
+
+	t.Run("Mock Driver Interface", func(t *testing.T) {
+		key := "test_key"
+		value := "test_value"
+
+		// Setup expectations
+		mockDriver.EXPECT().Set(ctx, key, value, time.Duration(0)).Return(nil).Once()
+		mockDriver.EXPECT().Get(ctx, key).Return(value, true).Once()
+		mockDriver.EXPECT().Has(ctx, key).Return(true).Once()
+		mockDriver.EXPECT().Delete(ctx, key).Return(nil).Once()
+		mockDriver.EXPECT().Close().Return(nil).Once()
+
+		// Test operations
+		err := mockDriver.Set(ctx, key, value, 0)
+		assert.NoError(t, err)
+
+		result, found := mockDriver.Get(ctx, key)
+		assert.True(t, found)
+		assert.Equal(t, value, result)
+
+		exists := mockDriver.Has(ctx, key)
+		assert.True(t, exists)
+
+		err = mockDriver.Delete(ctx, key)
+		assert.NoError(t, err)
+
+		err = mockDriver.Close()
+		assert.NoError(t, err)
+	})
+
+	t.Run("Mock Multiple Operations", func(t *testing.T) {
+		values := map[string]interface{}{
+			"key1": "value1",
+			"key2": "value2",
+		}
+		keys := []string{"key1", "key2", "key3"}
+		expectedResults := map[string]interface{}{
+			"key1": "value1",
+			"key2": "value2",
+		}
+		expectedMissed := []string{"key3"}
+
+		mockDriver.EXPECT().SetMultiple(ctx, values, time.Duration(0)).Return(nil).Once()
+		mockDriver.EXPECT().GetMultiple(ctx, keys).Return(expectedResults, expectedMissed).Once()
+		mockDriver.EXPECT().DeleteMultiple(ctx, keys).Return(nil).Once()
+
+		err := mockDriver.SetMultiple(ctx, values, 0)
+		assert.NoError(t, err)
+
+		results, missed := mockDriver.GetMultiple(ctx, keys)
+		assert.Equal(t, expectedResults, results)
+		assert.Equal(t, expectedMissed, missed)
+
+		err = mockDriver.DeleteMultiple(ctx, keys)
+		assert.NoError(t, err)
+	})
+
+	t.Run("Mock Remember Operation", func(t *testing.T) {
+		key := "remember_key"
+		expectedValue := "computed_value"
+		callback := func() (interface{}, error) {
+			return expectedValue, nil
+		}
+
+		mockDriver.EXPECT().Remember(ctx, key, time.Duration(0), mock.MatchedBy(func(cb func() (interface{}, error)) bool {
+			return cb != nil
+		})).Return(expectedValue, nil).Once()
+
+		result, err := mockDriver.Remember(ctx, key, 0, callback)
+		assert.NoError(t, err)
+		assert.Equal(t, expectedValue, result)
+	})
+
+	t.Run("Mock Stats Operation", func(t *testing.T) {
+		expectedStats := map[string]interface{}{
+			"count":  5,
+			"hits":   25,
+			"misses": 3,
+			"type":   "memory",
+		}
+
+		mockDriver.EXPECT().Stats(ctx).Return(expectedStats).Once()
+
+		stats := mockDriver.Stats(ctx)
+		assert.Equal(t, expectedStats, stats)
+	})
+
+	t.Run("Mock Flush Operation", func(t *testing.T) {
+		mockDriver.EXPECT().Flush(ctx).Return(nil).Once()
+
+		err := mockDriver.Flush(ctx)
+		assert.NoError(t, err)
+	})
+}
+
+func TestMemoryDriverTestSuite(t *testing.T) {
+	suite.Run(t, new(MemoryDriverTestSuite))
+}
+
+func TestMemoryDriverConcurrency(t *testing.T) {
+	ctx := context.Background()
+	memoryConfig := config.DriverMemoryConfig{
+		DefaultTTL:      300,
+		CleanupInterval: 60,
+	}
+
+	memoryDriver := driver.NewMemoryDriver(memoryConfig)
+	defer memoryDriver.Close()
+
+	t.Run("Concurrent Operations", func(t *testing.T) {
+		// Test concurrent reads and writes
+		done := make(chan bool, 100)
+
+		// Start multiple goroutines for writing
+		for i := 0; i < 50; i++ {
+			go func(id int) {
+				for j := 0; j < 10; j++ {
+					key := fmt.Sprintf("concurrent:write:%d:%d", id, j)
+					value := fmt.Sprintf("value_%d_%d", id, j)
+					memoryDriver.Set(ctx, key, value, 0)
+				}
+				done <- true
+			}(i)
+		}
+
+		// Start multiple goroutines for reading
+		for i := 0; i < 50; i++ {
+			go func(id int) {
+				for j := 0; j < 10; j++ {
+					key := fmt.Sprintf("concurrent:read:%d:%d", id, j)
+					memoryDriver.Set(ctx, key, "read_value", 0)
+					memoryDriver.Get(ctx, key)
+				}
+				done <- true
+			}(i)
+		}
+
+		// Wait for all goroutines to complete
+		for i := 0; i < 100; i++ {
+			<-done
+		}
+
+		// Verify some data exists
+		stats := memoryDriver.Stats(ctx)
+		assert.Greater(t, stats["count"], 0)
+	})
+}
+
+func BenchmarkMemoryDriver(b *testing.B) {
+	ctx := context.Background()
+	memoryConfig := config.DriverMemoryConfig{
+		DefaultTTL:      300,
+		CleanupInterval: 0, // Disable cleanup for benchmarks
+	}
+
+	memoryDriver := driver.NewMemoryDriver(memoryConfig)
+	defer memoryDriver.Close()
+
+	b.Run("Set", func(b *testing.B) {
+		value := map[string]interface{}{"test": "value", "number": 123}
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			key := fmt.Sprintf("bench:set:%d", i)
+			memoryDriver.Set(ctx, key, value, 0)
+		}
+	})
+
+	b.Run("Get", func(b *testing.B) {
+		// Setup data
+		value := map[string]interface{}{"test": "value", "number": 123}
+		for i := 0; i < 1000; i++ {
+			key := fmt.Sprintf("bench:get:%d", i)
+			memoryDriver.Set(ctx, key, value, 0)
+		}
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			key := fmt.Sprintf("bench:get:%d", i%1000)
+			memoryDriver.Get(ctx, key)
+		}
+	})
+
+	b.Run("SetMultiple", func(b *testing.B) {
+		values := map[string]interface{}{
+			"key1": "value1",
+			"key2": "value2",
+			"key3": "value3",
+		}
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			memoryDriver.SetMultiple(ctx, values, 0)
+		}
+	})
+
+	b.Run("GetMultiple", func(b *testing.B) {
+		// Setup data
+		values := map[string]interface{}{
+			"bench1": "value1",
+			"bench2": "value2",
+			"bench3": "value3",
+		}
+		memoryDriver.SetMultiple(ctx, values, 0)
+
+		keys := []string{"bench1", "bench2", "bench3"}
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			memoryDriver.GetMultiple(ctx, keys)
+		}
+	})
+
+	b.Run("Has", func(b *testing.B) {
+		// Setup data
+		for i := 0; i < 1000; i++ {
+			key := fmt.Sprintf("bench:has:%d", i)
+			memoryDriver.Set(ctx, key, "value", 0)
+		}
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			key := fmt.Sprintf("bench:has:%d", i%1000)
+			memoryDriver.Has(ctx, key)
 		}
 	})
 }

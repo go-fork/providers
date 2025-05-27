@@ -2,13 +2,13 @@ package driver
 
 import (
 	"context"
-	"fmt"
 	"time"
 
+	"github.com/go-fork/providers/cache/config"
+	"github.com/go-fork/providers/mongodb"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.mongodb.org/mongo-driver/mongo/readpref"
 )
 
 // MongoCacheItem đại diện cho một mục trong MongoDB cache.
@@ -22,29 +22,21 @@ type MongoCacheItem struct {
 	CreatedAt  time.Time   `bson:"created_at"` // Thời điểm tạo cache item
 }
 
-// MongoDBDriver cài đặt cache driver sử dụng MongoDB.
+type MongoDBDriver interface {
+	Driver
+}
+
+// mongoDBDriver cài đặt cache driver sử dụng MongoDB.
 //
-// MongoDBDriver lưu trữ dữ liệu cache trong một collection MongoDB.
+// mongoDBDriver lưu trữ dữ liệu cache trong một collection MongoDB.
 // Driver này phù hợp cho các ứng dụng yêu cầu persistence, phân tán dữ liệu
 // và cần tìm kiếm trong dữ liệu cache. MongoDB TTL index được sử dụng để tự động
 // xóa các document đã hết hạn.
-type MongoDBDriver struct {
-	client            *mongo.Client     // MongoDB client để giao tiếp với database
-	collection        *mongo.Collection // Collection lưu trữ dữ liệu cache
-	defaultExpiration time.Duration     // Thời gian sống mặc định cho các entry không chỉ định TTL
-	hits              int64             // Số lần cache hit
-	misses            int64             // Số lần cache miss
-}
-
-// MongoDBConfig cấu hình cho MongoDB driver.
-//
-// Cấu trúc này cung cấp các tùy chọn cấu hình chi tiết cho MongoDB driver
-// như thông tin kết nối, tên database và collection, và thời gian sống mặc định.
-type MongoDBConfig struct {
-	URI               string        // MongoDB connection string
-	Database          string        // Tên database
-	Collection        string        // Tên collection để lưu trữ cache
-	DefaultExpiration time.Duration // Thời gian sống mặc định
+type mongoDBDriver struct {
+	mongodb    *mongodb.Manager // Service Provider mongoDB manager
+	config     config.DriverMongodbConfig
+	database   *mongo.Database   // MongoDB database để lưu trữ cache
+	collection *mongo.Collection // MongoDB collection để lưu trữ cache
 }
 
 // NewMongoDBDriver tạo một MongoDB driver mới với cấu hình mặc định.
@@ -53,75 +45,19 @@ type MongoDBConfig struct {
 // Nó sử dụng giá trị mặc định cho defaultExpiration là 5 phút.
 //
 // Params:
-//   - uri: MongoDB connection string (vd: "mongodb://localhost:27017")
-//   - database: Tên database trong MongoDB
-//   - collection: Tên collection để lưu trữ cache
+//   - config: config.DriverMongodbConfig,
+//   - manager: mongodb.Manager
 //
 // Returns:
 //   - *MongoDBDriver: Driver đã được khởi tạo
 //   - error: Lỗi nếu không thể kết nối đến MongoDB hoặc tạo indices
-func NewMongoDBDriver(uri, database, collection string) (*MongoDBDriver, error) {
-	config := MongoDBConfig{
-		URI:               uri,
-		Database:          database,
-		Collection:        collection,
-		DefaultExpiration: 5 * time.Minute,
-	}
-	return NewMongoDBDriverWithConfig(config)
-}
-
-// NewMongoDBDriverWithConfig tạo một MongoDB driver mới với cấu hình chi tiết.
-//
-// Phương thức này khởi tạo một MongoDBDriver mới với cấu hình được cung cấp đầy đủ.
-// Nó thiết lập kết nối đến MongoDB và tạo TTL index cần thiết.
-//
-// Params:
-//   - config: Cấu trúc chứa toàn bộ thông tin cấu hình cho driver
-//
-// Returns:
-//   - *MongoDBDriver: Driver đã được khởi tạo
-//   - error: Lỗi nếu không thể kết nối đến MongoDB hoặc tạo indices
-func NewMongoDBDriverWithConfig(config MongoDBConfig) (*MongoDBDriver, error) {
-	// Kết nối đến MongoDB
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	clientOptions := options.Client().ApplyURI(config.URI)
-	client, err := mongo.Connect(ctx, clientOptions)
-	if err != nil {
-		return nil, fmt.Errorf("could not connect to MongoDB: %w", err)
-	}
-
-	// Kiểm tra kết nối
-	if err := client.Ping(ctx, readpref.Primary()); err != nil {
-		return nil, fmt.Errorf("could not ping MongoDB: %w", err)
-	}
-
-	// Lấy collection
-	collection := client.Database(config.Database).Collection(config.Collection)
-
-	// Tạo indexes cho expiration
-	indexModel := mongo.IndexModel{
-		Keys: bson.D{
-			{Key: "expiration", Value: 1},
-		},
-		Options: options.Index().SetExpireAfterSeconds(0),
-	}
-
-	// Tạo TTL index
-	_, err = collection.Indexes().CreateOne(ctx, indexModel)
-	if err != nil {
-		return nil, fmt.Errorf("could not create TTL index: %w", err)
-	}
-
-	// Khởi tạo driver
-	driver := &MongoDBDriver{
-		client:            client,
-		collection:        collection,
-		defaultExpiration: config.DefaultExpiration,
-	}
-
-	return driver, nil
+func NewMongoDBDriver(cfg config.DriverMongodbConfig, manager mongodb.Manager) (MongoDBDriver, error) {
+	return &mongoDBDriver{
+		mongodb:    &manager,
+		config:     cfg,
+		database:   manager.DatabaseWithName(cfg.Database),
+		collection: manager.DatabaseWithName(cfg.Database).Collection(cfg.Collection),
+	}, nil
 }
 
 // Get lấy một giá trị từ cache.
@@ -138,13 +74,13 @@ func NewMongoDBDriverWithConfig(config MongoDBConfig) (*MongoDBDriver, error) {
 // Returns:
 //   - interface{}: Giá trị được lưu trong cache (nil nếu không tìm thấy)
 //   - bool: true nếu tìm thấy key và chưa hết hạn, false nếu ngược lại
-func (d *MongoDBDriver) Get(ctx context.Context, key string) (interface{}, bool) {
+func (d *mongoDBDriver) Get(ctx context.Context, key string) (interface{}, bool) {
 	var cacheItem MongoCacheItem
 	err := d.collection.FindOne(ctx, bson.M{"_id": key}).Decode(&cacheItem)
 
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			d.misses++
+			d.config.Misses++
 			return nil, false
 		}
 		return nil, false
@@ -152,13 +88,13 @@ func (d *MongoDBDriver) Get(ctx context.Context, key string) (interface{}, bool)
 
 	// Kiểm tra expiration
 	if cacheItem.Expiration > 0 && time.Now().UnixNano() > cacheItem.Expiration {
-		d.misses++
+		d.config.Misses++
 		// Xóa item đã hết hạn
 		d.collection.DeleteOne(ctx, bson.M{"_id": key})
 		return nil, false
 	}
 
-	d.hits++
+	d.config.Hits++
 	return cacheItem.Value, true
 }
 
@@ -176,13 +112,13 @@ func (d *MongoDBDriver) Get(ctx context.Context, key string) (interface{}, bool)
 //
 // Returns:
 //   - error: Lỗi nếu có trong quá trình lưu trữ vào MongoDB
-func (d *MongoDBDriver) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+func (d *mongoDBDriver) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
 	var exp int64
 	now := time.Now()
 
 	if ttl == 0 {
-		if d.defaultExpiration > 0 {
-			exp = now.Add(d.defaultExpiration).UnixNano()
+		if d.config.GetDefaultExpiration() > 0 {
+			exp = now.Add(d.config.GetDefaultExpiration()).UnixNano()
 		}
 	} else if ttl > 0 {
 		exp = now.Add(ttl).UnixNano()
@@ -222,7 +158,7 @@ func (d *MongoDBDriver) Set(ctx context.Context, key string, value interface{}, 
 //
 // Returns:
 //   - bool: true nếu key tồn tại và chưa hết hạn, false nếu ngược lại
-func (d *MongoDBDriver) Has(ctx context.Context, key string) bool {
+func (d *mongoDBDriver) Has(ctx context.Context, key string) bool {
 	_, exists := d.Get(ctx, key)
 	return exists
 }
@@ -238,7 +174,7 @@ func (d *MongoDBDriver) Has(ctx context.Context, key string) bool {
 //
 // Returns:
 //   - error: Lỗi nếu có trong quá trình xóa
-func (d *MongoDBDriver) Delete(ctx context.Context, key string) error {
+func (d *mongoDBDriver) Delete(ctx context.Context, key string) error {
 	_, err := d.collection.DeleteOne(ctx, bson.M{"_id": key})
 	return err
 }
@@ -253,7 +189,7 @@ func (d *MongoDBDriver) Delete(ctx context.Context, key string) error {
 //
 // Returns:
 //   - error: Lỗi nếu có trong quá trình xóa
-func (d *MongoDBDriver) Flush(ctx context.Context) error {
+func (d *mongoDBDriver) Flush(ctx context.Context) error {
 	_, err := d.collection.DeleteMany(ctx, bson.M{})
 	return err
 }
@@ -270,7 +206,7 @@ func (d *MongoDBDriver) Flush(ctx context.Context) error {
 // Returns:
 //   - map[string]interface{}: Map chứa các key tìm thấy và giá trị tương ứng
 //   - []string: Danh sách các key không tìm thấy hoặc đã hết hạn
-func (d *MongoDBDriver) GetMultiple(ctx context.Context, keys []string) (map[string]interface{}, []string) {
+func (d *mongoDBDriver) GetMultiple(ctx context.Context, keys []string) (map[string]interface{}, []string) {
 	results := make(map[string]interface{})
 	missed := make([]string, 0)
 
@@ -327,9 +263,9 @@ func (d *MongoDBDriver) GetMultiple(ctx context.Context, keys []string) (map[str
 //
 // Returns:
 //   - error: Lỗi nếu có trong quá trình lưu trữ
-func (d *MongoDBDriver) SetMultiple(ctx context.Context, values map[string]interface{}, ttl time.Duration) error {
+func (d *mongoDBDriver) SetMultiple(ctx context.Context, values map[string]interface{}, ttl time.Duration) error {
 	if ttl == 0 {
-		ttl = d.defaultExpiration
+		ttl = d.config.GetDefaultExpiration()
 	}
 	// Chuẩn bị các document để chèn
 	now := time.Now()
@@ -369,7 +305,7 @@ func (d *MongoDBDriver) SetMultiple(ctx context.Context, values map[string]inter
 //
 // Returns:
 //   - error: Lỗi nếu có trong quá trình xóa
-func (d *MongoDBDriver) DeleteMultiple(ctx context.Context, keys []string) error {
+func (d *mongoDBDriver) DeleteMultiple(ctx context.Context, keys []string) error {
 	if len(keys) == 0 {
 		return nil
 	}
@@ -394,7 +330,7 @@ func (d *MongoDBDriver) DeleteMultiple(ctx context.Context, keys []string) error
 // Returns:
 //   - interface{}: Giá trị từ cache hoặc từ callback
 //   - error: Lỗi nếu có trong quá trình thực hiện hoặc từ callback
-func (d *MongoDBDriver) Remember(ctx context.Context, key string, ttl time.Duration, callback func() (interface{}, error)) (interface{}, error) {
+func (d *mongoDBDriver) Remember(ctx context.Context, key string, ttl time.Duration, callback func() (interface{}, error)) (interface{}, error) {
 	// Kiểm tra cache trước
 	value, found := d.Get(ctx, key)
 	if found {
@@ -422,7 +358,7 @@ func (d *MongoDBDriver) Remember(ctx context.Context, key string, ttl time.Durat
 //
 // Returns:
 //   - map[string]interface{}: Map chứa các thông tin thống kê
-func (d *MongoDBDriver) Stats(ctx context.Context) map[string]interface{} {
+func (d *mongoDBDriver) Stats(ctx context.Context) map[string]interface{} {
 	// Đếm số lượng document
 	count, err := d.collection.CountDocuments(ctx, bson.M{})
 	if err != nil {
@@ -432,15 +368,15 @@ func (d *MongoDBDriver) Stats(ctx context.Context) map[string]interface{} {
 	// Lấy stats từ cơ sở dữ liệu
 	var stats bson.M
 	cmd := bson.D{{Key: "collStats", Value: d.collection.Name()}}
-	err = d.client.Database(d.collection.Database().Name()).RunCommand(ctx, cmd).Decode(&stats)
+	err = d.database.RunCommand(ctx, cmd).Decode(&stats)
 	if err != nil {
 		stats = bson.M{}
 	}
 
 	return map[string]interface{}{
 		"count":  count,
-		"hits":   d.hits,
-		"misses": d.misses,
+		"hits":   d.config.Hits,
+		"misses": d.config.Misses,
 		"type":   "mongodb",
 		"stats":  stats,
 	}
@@ -453,9 +389,7 @@ func (d *MongoDBDriver) Stats(ctx context.Context) map[string]interface{} {
 //
 // Returns:
 //   - error: Lỗi nếu có trong quá trình đóng kết nối
-func (d *MongoDBDriver) Close() error {
-	if d.client != nil {
-		return d.client.Disconnect(context.Background())
-	}
+func (d *mongoDBDriver) Close() error {
+	// disconnect MongoDB connection by service provider mongodb
 	return nil
 }

@@ -207,7 +207,7 @@ func NewManager() Manager {
 //   - interface{}: Giá trị được lưu trong cache (nil nếu không tìm thấy)
 //   - bool: true nếu tìm thấy key và chưa hết hạn, false nếu ngược lại
 func (m *manager) Get(key string) (interface{}, bool) {
-	driver, err := m.getDefaultDriver()
+	driver, err := m.DefaultDriver()
 	if err != nil {
 		return nil, false
 	}
@@ -226,7 +226,7 @@ func (m *manager) Get(key string) (interface{}, bool) {
 // Returns:
 //   - error: Lỗi nếu có trong quá trình lưu trữ hoặc driver mặc định không được cấu hình
 func (m *manager) Set(key string, value interface{}, ttl time.Duration) error {
-	driver, err := m.getDefaultDriver()
+	driver, err := m.DefaultDriver()
 	if err != nil {
 		return err
 	}
@@ -243,7 +243,7 @@ func (m *manager) Set(key string, value interface{}, ttl time.Duration) error {
 // Returns:
 //   - bool: true nếu key tồn tại và chưa hết hạn, false nếu ngược lại
 func (m *manager) Has(key string) bool {
-	driver, err := m.getDefaultDriver()
+	driver, err := m.DefaultDriver()
 	if err != nil {
 		return false
 	}
@@ -260,7 +260,7 @@ func (m *manager) Has(key string) bool {
 // Returns:
 //   - error: Lỗi nếu có trong quá trình xóa hoặc driver mặc định không được cấu hình
 func (m *manager) Delete(key string) error {
-	driver, err := m.getDefaultDriver()
+	driver, err := m.DefaultDriver()
 	if err != nil {
 		return err
 	}
@@ -274,7 +274,7 @@ func (m *manager) Delete(key string) error {
 // Returns:
 //   - error: Lỗi nếu có trong quá trình xóa hoặc driver mặc định không được cấu hình
 func (m *manager) Flush() error {
-	driver, err := m.getDefaultDriver()
+	driver, err := m.DefaultDriver()
 	if err != nil {
 		return err
 	}
@@ -292,7 +292,7 @@ func (m *manager) Flush() error {
 //   - map[string]interface{}: Map chứa các key tìm thấy và giá trị tương ứng
 //   - []string: Danh sách các key không tìm thấy hoặc đã hết hạn
 func (m *manager) GetMultiple(keys []string) (map[string]interface{}, []string) {
-	driver, err := m.getDefaultDriver()
+	driver, err := m.DefaultDriver()
 	if err != nil {
 		return make(map[string]interface{}), keys
 	}
@@ -311,7 +311,7 @@ func (m *manager) GetMultiple(keys []string) (map[string]interface{}, []string) 
 // Returns:
 //   - error: Lỗi nếu có trong quá trình lưu trữ hoặc driver mặc định không được cấu hình
 func (m *manager) SetMultiple(values map[string]interface{}, ttl time.Duration) error {
-	driver, err := m.getDefaultDriver()
+	driver, err := m.DefaultDriver()
 	if err != nil {
 		return err
 	}
@@ -328,7 +328,7 @@ func (m *manager) SetMultiple(values map[string]interface{}, ttl time.Duration) 
 // Returns:
 //   - error: Lỗi nếu có trong quá trình xóa hoặc driver mặc định không được cấu hình
 func (m *manager) DeleteMultiple(keys []string) error {
-	driver, err := m.getDefaultDriver()
+	driver, err := m.DefaultDriver()
 	if err != nil {
 		return err
 	}
@@ -350,7 +350,7 @@ func (m *manager) DeleteMultiple(keys []string) error {
 //   - interface{}: Giá trị từ cache hoặc từ callback
 //   - error: Lỗi nếu có trong quá trình thực hiện, từ callback, hoặc driver mặc định không được cấu hình
 func (m *manager) Remember(key string, ttl time.Duration, callback func() (interface{}, error)) (interface{}, error) {
-	driver, err := m.getDefaultDriver()
+	driver, err := m.DefaultDriver()
 	if err != nil {
 		return nil, err
 	}
@@ -442,15 +442,16 @@ func (m *manager) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	var firstErr error
 	for name, driver := range m.drivers {
-		if err := driver.Close(); err != nil {
-			return fmt.Errorf("failed to close cache driver '%s': %w", name, err)
+		if err := driver.Close(); err != nil && firstErr == nil {
+			firstErr = fmt.Errorf("failed to close cache driver '%s': %w", name, err)
 		}
 	}
-	return nil
+	return firstErr
 }
 
-// getDefaultDriver trả về driver mặc định.
+// DefaultDriver trả về driver mặc định.
 //
 // Phương thức này lấy driver mặc định hiện tại từ manager, kiểm tra tính hợp lệ
 // và trả về lỗi nếu không có driver mặc định hoặc driver đã bị xóa.
@@ -458,7 +459,7 @@ func (m *manager) Close() error {
 // Returns:
 //   - driver.Driver: Đối tượng driver mặc định
 //   - error: Lỗi nếu không có driver mặc định hoặc driver mặc định không tồn tại
-func (m *manager) getDefaultDriver() (driver.Driver, error) {
+func (m *manager) DefaultDriver() (driver.Driver, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 

@@ -1,215 +1,400 @@
-# Go-Fork Cache Provider
-
-Gói `cache` cung cấp hệ thống quản lý cache hiện đại, linh hoạt và mở rộng cho ứng dụng Go. Được thiết kế theo kiến trúc đa driver, gói này hỗ trợ nhiều loại lưu trữ cache khác nhau, từ bộ nhớ trong RAM đến các giải pháp phân tán như Redis và MongoDB.
+# Cache Provider
 
 ## Giới thiệu
 
-Caching là một phần thiết yếu để tối ưu hiệu suất trong các ứng dụng hiện đại. Gói `cache` cung cấp một cách thống nhất để lưu trữ và truy xuất dữ liệu cache từ nhiều nguồn khác nhau. Với thiết kế thread-safe và các tính năng nâng cao như remember pattern, batch operations, gói này là giải pháp hoàn chỉnh cho nhu cầu caching trong ứng dụng Go.
+Cache Provider là một package cung cấp hệ thống quản lý cache hiện đại, linh hoạt và có khả năng mở rộng cao cho framework dependency injection go-fork. Provider này cung cấp tích hợp cache với nhiều backend khác nhau như Memory, File, Redis và MongoDB trong ứng dụng Go. Package này được thiết kế để giúp đơn giản hóa việc tích hợp cache vào ứng dụng Go của bạn, đồng thời hỗ trợ các tính năng nâng cao như Remember pattern, batch operations và TTL management.
 
-## Tính năng nổi bật
+## Tổng quan
 
-- **Đa dạng driver**: Hỗ trợ bộ nhớ (Memory), tệp tin (File), Redis, MongoDB và khả năng mở rộng driver tùy chỉnh.
-- **TTL (Time To Live)**: Tự động quản lý thời gian sống cho các mục trong cache.
-- **Remember pattern**: Hỗ trợ tính toán lười biếng và lưu trữ kết quả trong cache.
-- **Batch operations**: Thao tác hàng loạt để tối ưu hiệu suất.
-- **Serialization**: Tự động chuyển đổi giữa cấu trúc dữ liệu Go và định dạng lưu trữ.
-- **Thread-safe**: An toàn khi truy xuất và cập nhật đồng thời.
-- **Tích hợp DI**: Dễ dàng tích hợp với Dependency Injection container.
-- **Extensible**: Dễ dàng mở rộng với driver tùy chỉnh thông qua interface Driver.
+Cache Provider hỗ trợ:
+- Tích hợp dễ dàng với framework dependency injection go-fork
+- Đa dạng driver storage backend (Memory, File, Redis, MongoDB)
+- TTL (Time To Live) tự động cho cache entries
+- Remember pattern để lazy computation và caching
+- Batch operations để tối ưu hiệu suất
+- Thread-safe operations với concurrent access
+- Giao diện đơn giản cho các thao tác cache phổ biến
+- Monitoring và statistics cho performance tracking
 
-## Cấu trúc package
+## Cài đặt
 
-```
-cache/
-  ├── doc.go                 # Tài liệu tổng quan về package
-  ├── manager.go             # Định nghĩa interface Manager và DefaultManager
-  ├── provider.go            # ServiceProvider tích hợp với DI container
-  └── driver/
-      ├── driver.go          # Định nghĩa interface Driver
-      ├── memory.go          # Driver lưu cache trong bộ nhớ
-      ├── file.go            # Driver lưu cache trong hệ thống file
-      ├── redis.go           # Driver sử dụng Redis (v9+)
-      └── mongodb.go         # Driver sử dụng MongoDB
+```bash
+go get github.com/go-fork/providers/cache
 ```
 
-## Cách hoạt động
+## Cấu hình
 
-### Đăng ký Service Provider
+Sao chép file cấu hình mẫu và chỉnh sửa theo nhu cầu:
 
-Service Provider cho phép tích hợp dễ dàng gói `cache` vào ứng dụng sử dụng DI container:
+```bash
+cp configs/app.sample.yaml configs/app.yaml
+```
 
-```go
-// Trong file bootstrap của ứng dụng
-import "github.com/go-fork/providers/cache"
+### Ví dụ cấu hình
 
-func bootstrap(app interface{}) {
-    // Đăng ký cache provider
-    cacheProvider := cache.NewServiceProvider()
-    cacheProvider.Register(app)
+```yaml
+cache:
+  # Driver mặc định sẽ được sử dụng
+  default_driver: "memory"
+  
+  # Cấu hình các drivers
+  drivers:
+    # Memory driver - cache trong RAM
+    memory:
+      type: "memory"
+      default_ttl: 3600         # TTL mặc định (giây)
+      cleanup_interval: 600     # Interval dọn dẹp expired entries (giây)
+      max_items: 1000          # Số lượng item tối đa
     
-    // Boot các providers sau khi tất cả đã đăng ký
-    cacheProvider.Boot(app)
+    # File driver - cache trong file system
+    file:
+      type: "file"
+      path: "/tmp/cache"        # Thư mục lưu cache
+      default_ttl: 1800        # TTL mặc định (giây)
+      file_permissions: "0644"  # Quyền file
+    
+    # Redis driver - cache trong Redis
+    redis:
+      type: "redis"
+      addr: "localhost:6379"    # Địa chỉ Redis server
+      password: ""              # Password (nếu có)
+      db: 0                     # Database number
+      prefix: "myapp:"          # Prefix cho tất cả keys
+      default_ttl: 3600        # TTL mặc định (giây)
+    
+    # MongoDB driver - cache trong MongoDB
+    mongodb:
+      type: "mongodb"
+      uri: "mongodb://localhost:27017"  # MongoDB connection URI
+      database: "cache_db"              # Database name
+      collection: "cache_collection"    # Collection name
+      default_ttl: 3600                # TTL mặc định (giây)
+```
+
+## Sử dụng
+
+### Thiết lập cơ bản
+
+```go
+package main
+
+import (
+    "context"
+    "log"
+    "time"
+    
+    "github.com/go-fork/di"
+    "github.com/go-fork/providers/config"
+    "github.com/go-fork/providers/cache"
+    "github.com/go-fork/providers/cache/driver"
+)
+
+func main() {
+    // Tạo DI container
+    container := di.New()
+    
+    // Đăng ký provider config (nếu sử dụng service config)
+    configProvider := config.NewServiceProvider()
+    container.Register(configProvider)
+    
+    // Đăng ký Cache provider
+    cacheProvider := cache.NewServiceProvider()
+    container.Register(cacheProvider)
+    
+    // Boot các service providers
+    container.Boot()
+    
+    // Lấy Cache manager sử dụng MustMake
+    // MustMake sẽ panic nếu service không tồn tại hoặc không thể tạo được
+    cacheManager := container.MustMake("cache").(cache.Manager)
+    
+    // Tạo context với timeout
+    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    defer cancel()
+    
+    // Lưu dữ liệu vào cache
+    err := cacheManager.Set("user:1", map[string]interface{}{
+        "name":      "Nguyễn Văn A",
+        "email":     "nguyen@example.com",
+        "createdAt": time.Now(),
+    }, 1*time.Hour)
+    if err != nil {
+        log.Fatal("Không thể lưu vào cache:", err)
+    }
+    
+    // Lấy dữ liệu từ cache
+    userData, exists := cacheManager.Get("user:1")
+    if exists {
+        log.Printf("Dữ liệu user từ cache: %+v\n", userData)
+    }
+    
+    log.Println("Cache hoạt động thành công!")
 }
 ```
 
-ServiceProvider sẽ tự động:
-1. Tạo một cache manager mới
-2. Cấu hình driver mặc định (thường là memory)
-3. Đăng ký manager vào container với key "cache"
-
-### Sử dụng trực tiếp
-
-Bạn có thể tạo và sử dụng cache manager mà không cần thông qua DI container:
+### Sử dụng các phương thức của Manager
 
 ```go
-// Tạo manager mới
-manager := cache.NewManager()
+// Khởi tạo context với timeout
+ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+defer cancel()
 
-// Thêm memory driver
-memoryDriver := driver.NewMemoryDriver()
-manager.AddDriver("memory", memoryDriver)
-manager.SetDefaultDriver("memory")
+// Kiểm tra key có tồn tại không
+exists := cacheManager.Has("user:1")
+log.Printf("Key user:1 tồn tại: %v\n", exists)
 
-// Thêm file driver
-fileDriver, err := driver.NewFileDriver("/path/to/cache/dir")
-if err == nil {
-    manager.AddDriver("file", fileDriver)
-}
-
-// Bắt đầu sử dụng cache
-manager.Set("user:1", userData, 1*time.Hour)  // Cache với TTL 1 giờ
-userData, exists := manager.Get("user:1")
-manager.Delete("user:1")
-```
-
-### Làm việc với các Driver
-
-#### Memory Driver
-
-Driver này lưu cache trong bộ nhớ RAM, phù hợp cho ứng dụng đơn tiến trình:
-
-```go
-// Tạo memory driver
-memDriver := driver.NewMemoryDriver()
-
-// Thiết lập thời gian sống mặc định (1 giờ)
-memDriver.SetDefaultExpiration(1 * time.Hour)
-```
-
-#### File Driver
-
-Driver này lưu cache trong các file trên hệ thống tệp tin:
-
-```go
-// Tạo file driver với thư mục cache
-fileDriver, err := driver.NewFileDriver("/path/to/cache")
-if err != nil {
-    // Xử lý lỗi
-}
-
-// Thiết lập thời gian sống mặc định
-fileDriver.SetDefaultExpiration(30 * time.Minute)
-```
-
-#### Redis Driver
-
-Driver này sử dụng Redis làm backend lưu trữ:
-
-```go
-// Tạo Redis client
-redisClient := redis.NewClient(&redis.Options{
-    Addr: "localhost:6379",
+// Remember pattern - lazy computation
+userData, err := cacheManager.Remember("expensive_user:1", 1*time.Hour, func() (interface{}, error) {
+    // Function này chỉ được gọi khi cache miss
+    return fetchExpensiveUserData(1)
 })
-
-// Tạo Redis driver
-redisDriver := driver.NewRedisDriver(redisClient)
-redisDriver.SetPrefix("myapp:")  // Tiền tố cho tất cả các key
-```
-
-#### MongoDB Driver
-
-Driver này sử dụng MongoDB làm backend lưu trữ:
-
-```go
-// Tạo MongoDB client
-ctx := context.Background()
-clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
-mongoClient, err := mongo.Connect(ctx, clientOptions)
 if err != nil {
-    // Xử lý lỗi
+    log.Fatal("Remember pattern thất bại:", err)
 }
 
-// Tạo MongoDB driver
-mongoDriver, err := driver.NewMongoDBDriver(mongoClient, "cache_db", "cache_collection")
+// Batch operations - lấy nhiều keys cùng lúc
+userKeys := []string{"user:1", "user:2", "user:3"}
+foundUsers, missingKeys := cacheManager.GetMultiple(userKeys)
+log.Printf("Tìm thấy users: %v, thiếu keys: %v\n", len(foundUsers), missingKeys)
+
+// Batch set - lưu nhiều values cùng lúc  
+userDataMap := map[string]interface{}{
+    "user:4": map[string]string{"name": "User 4"},
+    "user:5": map[string]string{"name": "User 5"},
+}
+err = cacheManager.SetMultiple(userDataMap, 30*time.Minute)
 if err != nil {
-    // Xử lý lỗi
+    log.Fatal("Batch set thất bại:", err)
+}
+
+// Xóa key
+err = cacheManager.Delete("user:1")
+if err != nil {
+    log.Fatal("Không thể xóa key:", err)
+}
+
+// Xóa nhiều keys cùng lúc
+err = cacheManager.DeleteMultiple([]string{"user:2", "user:3"})
+if err != nil {
+    log.Fatal("Batch delete thất bại:", err)
+}
+
+// Xóa toàn bộ cache
+err = cacheManager.Clear()
+if err != nil {
+    log.Fatal("Không thể xóa toàn bộ cache:", err)
 }
 ```
 
-### Sử dụng Remember Pattern
+### Các Services đăng ký
 
-Remember pattern giúp tối ưu việc tính toán giá trị đắt đỏ chỉ khi cần:
+Provider đăng ký các services sau trong DI container:
+
+- `cache` - Instance Cache Manager
+- `cache.manager` - Alias cho Cache Manager
+
+Ví dụ truy xuất các services này với MustMake:
 
 ```go
-userData, err := manager.Remember("user:1", 1*time.Hour, func() (interface{}, error) {
-    // Hàm này chỉ được gọi khi "user:1" không tồn tại trong cache
-    return fetchUserFromDatabase(1)
-})
+// Lấy Cache Manager
+cacheManager := container.MustMake("cache").(cache.Manager)
+
+// Lấy Cache Manager thông qua alias
+manager := container.MustMake("cache.manager").(cache.Manager)
 ```
 
-### Batch Operations
+## Danh sách phương thức
 
-Thao tác hàng loạt để giảm số lần giao tiếp với hệ thống cache:
+### Các phương thức cơ bản
+
+| Phương thức | Mô tả |
+|------------|-------|
+| `Get(key string) (interface{}, bool)` | Lấy một giá trị từ cache theo key |
+| `Set(key string, value interface{}, ttl time.Duration) error` | Đặt một giá trị vào cache với TTL |
+| `Has(key string) bool` | Kiểm tra xem một key có tồn tại trong cache không |
+| `Delete(key string) error` | Xóa một key khỏi cache |
+| `Flush() error` | Xóa tất cả các key khỏi cache |
+
+### Các phương thức batch operations
+
+| Phương thức | Mô tả |
+|------------|-------|
+| `GetMultiple(keys []string) (map[string]interface{}, []string)` | Lấy nhiều giá trị từ cache |
+| `SetMultiple(values map[string]interface{}, ttl time.Duration) error` | Đặt nhiều giá trị vào cache |
+| `DeleteMultiple(keys []string) error` | Xóa nhiều key khỏi cache |
+
+### Các phương thức nâng cao
+
+| Phương thức | Mô tả |
+|------------|-------|
+| `Remember(key string, ttl time.Duration, callback func() (interface{}, error)) (interface{}, error)` | Lấy giá trị từ cache hoặc thực thi callback nếu không tìm thấy |
+
+### Các phương thức quản lý driver
+
+| Phương thức | Mô tả |
+|------------|-------|
+| `AddDriver(name string, driver driver.Driver)` | Thêm một driver vào manager |
+| `SetDefaultDriver(name string)` | Đặt driver mặc định |
+| `Driver(name string) (driver.Driver, error)` | Trả về một driver cụ thể theo tên |
+
+### Các phương thức tiện ích
+
+| Phương thức | Mô tả |
+|------------|-------|
+| `Stats() map[string]map[string]interface{}` | Trả về thông tin thống kê về tất cả các driver |
+| `Close() error` | Đóng tất cả các driver |
+
+## Lưu ý
+
+1. **TTL Management**: Mỗi driver có thể có cách xử lý TTL khác nhau. Memory driver có automatic cleanup, trong khi File driver kiểm tra TTL khi truy cập.
+
+2. **Thread Safety**: Tất cả các phương thức của Manager đều thread-safe và có thể được gọi đồng thời từ nhiều goroutine.
+
+3. **Error Handling**: Luôn kiểm tra error return từ các phương thức Set, Delete, và các batch operations.
+
+4. **Driver Selection**: Nếu không có driver mặc định được thiết lập, các phương thức cache sẽ trả về error.
+
+5. **Resource Management**: Luôn gọi `Close()` khi kết thúc để giải phóng tài nguyên của tất cả drivers.
+
+6. **Configuration**: Mỗi driver có thể yêu cầu cấu hình riêng. Tham khảo documentation của từng driver để biết chi tiết.
+
+7. **Performance**: Batch operations thường hiệu quả hơn multiple single operations, đặc biệt với Redis và MongoDB drivers.
+
+## Phát triển
+
+### Mock cho Testing
+
+Package này cung cấp mock cho việc testing trong thư mục `mocks`. Sử dụng MockManager để test các thành phần phụ thuộc vào cache mà không cần backend thật:
 
 ```go
-// Lấy nhiều giá trị trong một lần gọi
-userIDs := []string{"user:1", "user:2", "user:3"}
-foundUsers, missingKeys := manager.GetMultiple(userIDs)
+import (
+    "testing"
+    "time"
+    "github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/mock"
+    "github.com/go-fork/providers/cache/mocks"
+)
 
-// Lưu nhiều giá trị trong một lần gọi
-users := map[string]interface{}{
-    "user:4": user4Data,
-    "user:5": user5Data,
+func TestYourFunction(t *testing.T) {
+    // Tạo mock manager
+    mockManager := mocks.NewMockManager(t)
+    
+    // Thiết lập expectations cơ bản
+    mockManager.On("Get", "user:1").Return(userData, true)
+    mockManager.On("Set", "user:1", mock.Anything, mock.Anything).Return(nil)
+    mockManager.On("Has", "user:1").Return(true)
+    mockManager.On("Delete", "user:1").Return(nil)
+    
+    // Mock cho Remember pattern
+    mockManager.On("Remember", "expensive_key", mock.Anything, mock.AnythingOfType("func() (interface{}, error)")).
+        Run(func(args mock.Arguments) {
+            // Giả lập thực thi callback function
+            callback := args.Get(2).(func() (interface{}, error))
+            // Chạy callback
+            callback()
+        }).
+        Return(mockData, nil)
+    
+    // Mock cho batch operations
+    mockManager.On("GetMultiple", []string{"user:1", "user:2"}).
+        Return(map[string]interface{}{"user:1": userData}, []string{"user:2"})
+    
+    mockManager.On("SetMultiple", mock.Anything, mock.Anything).Return(nil)
+    mockManager.On("DeleteMultiple", mock.Anything).Return(nil)
+    
+    // Mock cho Clear và Close
+    mockManager.On("Clear").Return(nil)
+    mockManager.On("Close").Return(nil)
+    
+    // Sử dụng mock trong tests
+    err := YourFunction(mockManager)
+    
+    // Kiểm tra kết quả
+    assert.NoError(t, err)
+    mockManager.AssertExpectations(t)
 }
-manager.SetMultiple(users, 1*time.Hour)
 
-// Xóa nhiều giá trị trong một lần gọi
-manager.DeleteMultiple([]string{"user:1", "user:2"})
+// Ví dụ về hàm sử dụng Cache Manager
+func YourFunction(m cache.Manager) error {
+    // Set cache
+    if err := m.Set("test", "data", 1*time.Hour); err != nil {
+        return err
+    }
+    
+    // Get from cache
+    data, exists := m.Get("test")
+    if !exists {
+        return fmt.Errorf("cache miss")
+    }
+    
+    // Do something with data...
+    
+    return nil
+}
 ```
 
-### Đóng các driver đúng cách
+### Tạo lại Mocks
 
-Luôn đóng manager khi không sử dụng để giải phóng tài nguyên:
+Mocks được tạo bằng [mockery](https://github.com/vektra/mockery). Để tạo lại mocks, chạy lệnh sau từ thư mục gốc của project:
+
+```bash
+mockery
+```
+
+Lệnh này sẽ sử dụng cấu hình từ file `.mockery.yaml`.
+
+### Phương pháp cải thiện test coverage
+
+Để cải thiện test coverage của package, hãy chú ý đến các phương pháp sau:
+
+1. **Thiết lập test helper**: Tạo các hàm helper để thiết lập và dọn dẹp môi trường test một cách nhất quán.
+
+2. **Mock external dependencies**: Sử dụng mock cho các dependency bên ngoài như Redis client, MongoDB client để không phụ thuộc vào service thật trong unit tests.
+
+3. **Kiểm tra cả happy path và error path**: Đảm bảo kiểm tra cả trường hợp thành công và thất bại của mỗi hàm.
+
+4. **Sử dụng testify**: Sử dụng các assertion của package testify để làm cho tests dễ đọc hơn.
+
+5. **Docker containers cho integration tests**: Sử dụng Docker để chạy Redis/MongoDB tạm thời cho integration tests.
+
+Ví dụ thiết lập test helper:
 
 ```go
-manager := cache.NewManager()
-// ... cấu hình và sử dụng manager ...
+// testHelper.go
+package cache_test
 
-// Đóng manager khi kết thúc
-defer manager.Close()
+import (
+    "testing"
+    "time"
+    
+    "github.com/go-fork/providers/cache"
+    "github.com/go-fork/providers/cache/driver"
+    "github.com/go-fork/providers/cache/config"
+    "github.com/stretchr/testify/require"
+)
+
+func setupTestManager(t *testing.T) (cache.Manager, func()) {
+    // Tạo manager cho test
+    manager := cache.NewManager()
+    
+    // Thêm memory driver cho test
+    memConfig := config.DriverMemoryConfig{
+        DefaultTTL:      60, // 1 minute for fast test
+        CleanupInterval: 10, // 10 seconds
+        MaxItems:        100,
+    }
+    memDriver := driver.NewMemoryDriver(memConfig)
+    manager.AddDriver("test_memory", memDriver)
+    manager.SetDefaultDriver("test_memory")
+    
+    // Tạo cleanup function
+    cleanup := func() {
+        err := manager.Clear()
+        require.NoError(t, err)
+        err = manager.Close()
+        require.NoError(t, err)
+    }
+    
+    return manager, cleanup
+}
 ```
-
-### Tạo Custom Driver
-
-Bạn có thể triển khai driver của riêng mình bằng cách tuân thủ interface Driver:
-
-```go
-type MyCustomDriver struct {
-    // Các thành phần nội bộ của driver
-}
-
-// Triển khai các phương thức của interface Driver
-func (d *MyCustomDriver) Get(ctx context.Context, key string) (interface{}, bool) {
-    // Triển khai lấy giá trị
-}
-
-func (d *MyCustomDriver) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
-    // Triển khai lưu trữ giá trị
-}
-
-// ... triển khai các phương thức còn lại ...
-```
-
----
-
-Để biết thêm thông tin chi tiết và API reference, vui lòng xem tài liệu trong file `doc.go` hoặc chạy lệnh `go doc github.com/go-fork/providers/cache`.

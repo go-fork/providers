@@ -1,0 +1,112 @@
+# Cache Configuration Sample
+# This configuration file provides examples for setting up cache with different drivers
+# including memory, file, Redis, and MongoDB drivers
+
+cache:
+  # Default driver to use when no specific driver is specified
+  # Options: memory, file, redis, mongodb
+  default_driver: "memory"
+  
+  # Default TTL (Time To Live) for cache entries in seconds
+  # 0 means no expiration, -1 means use driver's default
+  default_ttl: 3600  # 1 hour
+  
+  # Cache key prefix to avoid conflicts with other applications
+  prefix: "cache:"
+  
+  # Drivers configuration
+  drivers:
+    # Memory driver configuration
+    memory:
+      # Enable Memory cache driver
+      enabled: true
+      # Default expiration time for memory cache in seconds
+      default_ttl: 3600  # 1 hour
+      
+      # Cleanup interval for expired items in seconds
+      cleanup_interval: 600     # 10 minutes
+      
+      # Maximum number of items in memory cache (0 = unlimited)
+      max_items: 10000
+      
+    # File driver configuration  
+    file:
+      # Enable File cache driver
+      enabled: true
+      # Directory path to store cache files
+      path: "./storage/cache"
+      
+      # Default TTL (Time To Live) for file cache in seconds
+      default_ttl: 3600  # 1 hour
+
+      # File extension for cache files
+      extension: ".cache"
+      
+      # Cleanup interval for expired files in seconds
+      cleanup_interval: 600     # 10 minutes
+      
+    # Redis driver configuration
+    redis:
+      # Enable Redis cache driver
+      enabled: true
+      # Default TTL (Time To Live) for Redis cache in seconds
+
+      default_ttl: 3600  # 1 hour
+      # Serialization format: json, gob, msgpack
+      serializer: "json"
+        
+    # MongoDB driver configuration
+    mongodb:
+     # Enable MongoDB cache driver
+      enabled: true 
+      # Database name for cache storage
+      database: "cache_db"
+
+      # Collection name for cache storage
+      collection: "cache_items"
+      
+      # Default expiration time for MongoDB cache in seconds
+      default_ttl: 3600  # 1 hour
+      
+      # Cache statistics tracking
+      hits: 0    # Number of cache hits (readonly)
+      misses: 0  # Number of cache misses (readonly)
+
+# Environment-specific configurations
+# You can override the above settings based on your environment
+
+# Development environment example
+development:
+  cache:
+    default_driver: "memory"
+    drivers:
+      memory:
+        default_ttl: 300  # 5 minutes for faster testing
+        cleanup_interval: 60     # 1 minute
+        max_items: 1000
+      file:
+        path: "./tmp/cache"
+        
+# Production environment example  
+production:
+  cache:
+    default_driver: "redis"
+    drivers:
+      redis:
+        key_prefix: "prod:cache:"
+        default_ttl: 7200  # 2 hours in production
+        serializer: "json"
+      mongodb:
+        database: "${MONGODB_CACHE_DATABASE:cache_db}"
+        collection: "${MONGODB_CACHE_COLLECTION:cache_items}"
+        default_ttl: 7200  # 2 hours in production
+
+# Testing environment example
+testing:
+  cache:
+    default_driver: "memory"
+    drivers:
+      memory:
+        default_ttl: 60  # 1 hour
+        cleanup_interval: 10     # 10 seconds
+        max_items: 100

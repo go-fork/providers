@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## v0.0.5 - 2025-05-28
+
+### Changed
+- **Service Provider**: Nâng cấp phiên bản DI v0.0.5 Thêm Providers(), Requires()
+- **Configuration**: Thêm cấu hình theo hệ thống, cho phép lựa chọn kích hoạt drivers
+- **Mongodb**: Sử dụng Service Provider Mongodb cho driver MongoDB
+- **Redis**: Sử dụng Service Provider Redis cho driver Redis
+- **Driver**: Tái cấu trúc lại logic xử lý các drivers
+- **Test Units**: Sử dụng mockery tạo Mock interface
+
 ## v0.0.4 - 2025-05-25
 
 ### Added

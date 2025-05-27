@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"github.com/go-fork/providers/cache/config"
 )
 
 // Item đại diện cho một mục trong memory cache.
@@ -29,13 +31,17 @@ func (i *Item) Expired() bool {
 	return time.Now().UnixNano() > i.Expiration
 }
 
-// MemoryDriver cài đặt cache driver sử dụng memory (in-memory).
+type MemoryDriver interface {
+	Driver
+}
+
+// memoryDriver cài đặt cache driver sử dụng memory (in-memory).
 //
-// MemoryDriver lưu trữ dữ liệu cache trong bộ nhớ chính của ứng dụng.
+// memoryDriver lưu trữ dữ liệu cache trong bộ nhớ chính của ứng dụng.
 // Driver này cung cấp khả năng truy xuất dữ liệu nhanh nhất nhưng dữ liệu sẽ
 // bị mất khi ứng dụng khởi động lại. Nó hỗ trợ TTL và tự động dọn dẹp
 // các entry đã hết hạn.
-type MemoryDriver struct {
+type memoryDriver struct {
 	items             map[string]Item // Map lưu trữ các cache item
 	mu                sync.RWMutex    // Mutex cho các thao tác thread-safe
 	janitorInterval   time.Duration   // Khoảng thời gian giữa các lần dọn dẹp
@@ -53,31 +59,16 @@ type MemoryDriver struct {
 //
 // Returns:
 //   - *MemoryDriver: Driver đã được khởi tạo
-func NewMemoryDriver() *MemoryDriver {
-	return NewMemoryDriverWithOptions(5*time.Minute, 10*time.Minute)
-}
-
-// NewMemoryDriverWithOptions tạo một memory driver mới với các tùy chọn chi tiết.
-//
-// Phương thức này khởi tạo một MemoryDriver mới với các tùy chọn thời gian hết hạn mặc định
-// và khoảng thời gian dọn dẹp được chỉ định.
-//
-// Params:
-//   - defaultExpiration: Thời gian sống mặc định cho các cache entry không chỉ định TTL
-//   - cleanupInterval: Khoảng thời gian giữa các lần dọn dẹp tự động
-//
-// Returns:
-//   - *MemoryDriver: Driver đã được khởi tạo
-func NewMemoryDriverWithOptions(defaultExpiration, cleanupInterval time.Duration) *MemoryDriver {
-	driver := &MemoryDriver{
+func NewMemoryDriver(cfg config.DriverMemoryConfig) MemoryDriver {
+	driver := &memoryDriver{
 		items:             make(map[string]Item),
-		janitorInterval:   cleanupInterval,
-		defaultExpiration: defaultExpiration,
+		janitorInterval:   time.Duration(cfg.CleanupInterval) * time.Second,
+		defaultExpiration: time.Duration(cfg.DefaultTTL) * time.Second,
 		stopJanitor:       make(chan bool),
 	}
 
 	// Chỉ chạy janitor nếu có khoảng thời gian dọn dẹp > 0
-	if cleanupInterval > 0 {
+	if cfg.CleanupInterval > 0 {
 		go driver.startJanitor()
 		driver.janitorRunning = true
 	}
@@ -99,7 +90,7 @@ func NewMemoryDriverWithOptions(defaultExpiration, cleanupInterval time.Duration
 // Returns:
 //   - interface{}: Giá trị được lưu trong cache (nil nếu không tìm thấy)
 //   - bool: true nếu tìm thấy key và chưa hết hạn, false nếu ngược lại
-func (d *MemoryDriver) Get(ctx context.Context, key string) (interface{}, bool) {
+func (d *memoryDriver) Get(ctx context.Context, key string) (interface{}, bool) {
 	d.mu.RLock()
 	item, found := d.items[key]
 	d.mu.RUnlock()
@@ -138,7 +129,7 @@ func (d *MemoryDriver) Get(ctx context.Context, key string) (interface{}, bool) 
 //
 // Returns:
 //   - error: Luôn trả về nil trong memory driver
-func (d *MemoryDriver) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+func (d *memoryDriver) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
 	var exp int64
 
 	if ttl == 0 {
@@ -170,7 +161,7 @@ func (d *MemoryDriver) Set(ctx context.Context, key string, value interface{}, t
 //
 // Returns:
 //   - bool: true nếu key tồn tại và chưa hết hạn, false nếu ngược lại
-func (d *MemoryDriver) Has(ctx context.Context, key string) bool {
+func (d *memoryDriver) Has(ctx context.Context, key string) bool {
 	_, exists := d.Get(ctx, key)
 	return exists
 }
@@ -186,7 +177,7 @@ func (d *MemoryDriver) Has(ctx context.Context, key string) bool {
 //
 // Returns:
 //   - error: Luôn trả về nil trong memory driver
-func (d *MemoryDriver) Delete(ctx context.Context, key string) error {
+func (d *memoryDriver) Delete(ctx context.Context, key string) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -203,7 +194,7 @@ func (d *MemoryDriver) Delete(ctx context.Context, key string) error {
 //
 // Returns:
 //   - error: Luôn trả về nil trong memory driver
-func (d *MemoryDriver) Flush(ctx context.Context) error {
+func (d *memoryDriver) Flush(ctx context.Context) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -223,7 +214,7 @@ func (d *MemoryDriver) Flush(ctx context.Context) error {
 // Returns:
 //   - map[string]interface{}: Map chứa các key tìm thấy và giá trị tương ứng
 //   - []string: Danh sách các key không tìm thấy hoặc đã hết hạn
-func (d *MemoryDriver) GetMultiple(ctx context.Context, keys []string) (map[string]interface{}, []string) {
+func (d *memoryDriver) GetMultiple(ctx context.Context, keys []string) (map[string]interface{}, []string) {
 	results := make(map[string]interface{})
 	missed := make([]string, 0)
 
@@ -251,7 +242,7 @@ func (d *MemoryDriver) GetMultiple(ctx context.Context, keys []string) (map[stri
 //
 // Returns:
 //   - error: Lỗi nếu có trong quá trình thực hiện (luôn là nil trong memory driver)
-func (d *MemoryDriver) SetMultiple(ctx context.Context, values map[string]interface{}, ttl time.Duration) error {
+func (d *memoryDriver) SetMultiple(ctx context.Context, values map[string]interface{}, ttl time.Duration) error {
 	for key, value := range values {
 		if err := d.Set(ctx, key, value, ttl); err != nil {
 			return err
@@ -271,7 +262,7 @@ func (d *MemoryDriver) SetMultiple(ctx context.Context, values map[string]interf
 //
 // Returns:
 //   - error: Lỗi nếu có trong quá trình thực hiện (luôn là nil trong memory driver)
-func (d *MemoryDriver) DeleteMultiple(ctx context.Context, keys []string) error {
+func (d *memoryDriver) DeleteMultiple(ctx context.Context, keys []string) error {
 	for _, key := range keys {
 		if err := d.Delete(ctx, key); err != nil {
 			return err
@@ -295,7 +286,7 @@ func (d *MemoryDriver) DeleteMultiple(ctx context.Context, keys []string) error 
 // Returns:
 //   - interface{}: Giá trị từ cache hoặc từ callback
 //   - error: Lỗi nếu có trong quá trình thực hiện hoặc từ callback
-func (d *MemoryDriver) Remember(ctx context.Context, key string, ttl time.Duration, callback func() (interface{}, error)) (interface{}, error) {
+func (d *memoryDriver) Remember(ctx context.Context, key string, ttl time.Duration, callback func() (interface{}, error)) (interface{}, error) {
 	// Kiểm tra cache trước
 	value, found := d.Get(ctx, key)
 	if found {
@@ -323,7 +314,7 @@ func (d *MemoryDriver) Remember(ctx context.Context, key string, ttl time.Durati
 //
 // Returns:
 //   - map[string]interface{}: Map chứa các thông tin thống kê
-func (d *MemoryDriver) Stats(ctx context.Context) map[string]interface{} {
+func (d *memoryDriver) Stats(ctx context.Context) map[string]interface{} {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
@@ -345,7 +336,7 @@ func (d *MemoryDriver) Stats(ctx context.Context) map[string]interface{} {
 //
 // Returns:
 //   - error: Lỗi nếu có trong quá trình giải phóng tài nguyên (luôn là nil trong memory driver)
-func (d *MemoryDriver) Close() error {
+func (d *memoryDriver) Close() error {
 	if d.janitorRunning {
 		d.stopJanitor <- true
 	}
@@ -356,7 +347,7 @@ func (d *MemoryDriver) Close() error {
 //
 // Phương thức này chạy một goroutine định kỳ gọi deleteExpired để
 // xóa các cache entry đã hết hạn theo khoảng thời gian đã cấu hình.
-func (d *MemoryDriver) startJanitor() {
+func (d *memoryDriver) startJanitor() {
 	ticker := time.NewTicker(d.janitorInterval)
 	defer ticker.Stop()
 
@@ -374,7 +365,7 @@ func (d *MemoryDriver) startJanitor() {
 //
 // Phương thức này quét qua tất cả các item trong cache map,
 // kiểm tra thời gian hết hạn và xóa những item đã quá hạn.
-func (d *MemoryDriver) deleteExpired() {
+func (d *memoryDriver) deleteExpired() {
 	now := time.Now().UnixNano()
 
 	d.mu.Lock()

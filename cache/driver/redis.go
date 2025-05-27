@@ -1,47 +1,44 @@
 package driver
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"time"
 
+	"github.com/go-fork/providers/cache/config"
+	redisManager "github.com/go-fork/providers/redis"
 	"github.com/redis/go-redis/v9"
+	"github.com/vmihailenco/msgpack/v5"
 )
 
-// RedisDriver cài đặt cache driver sử dụng Redis.
+type RedisDriver interface {
+	Driver
+	WithSerializer(serializer string) RedisDriver
+}
+
+// redisDriver cài đặt cache driver sử dụng Redis.
 //
-// RedisDriver lưu trữ dữ liệu cache trong Redis, một hệ thống lưu trữ key-value
+// redisDriver lưu trữ dữ liệu cache trong Redis, một hệ thống lưu trữ key-value
 // có tính năng persistence và phân tán. Driver này phù hợp cho các ứng dụng yêu cầu
 // khả năng mở rộng, phân tán cache giữa nhiều instance ứng dụng và khả năng phục hồi
 // sau khi khởi động lại. Nó cũng tận dụng các tính năng của Redis như key expiration.
-type RedisDriver struct {
-	client            *redis.Client                     // Redis client để giao tiếp với Redis server
-	prefix            string                            // Tiền tố cho các key cache để tránh xung đột
-	defaultExpiration time.Duration                     // Thời gian sống mặc định cho các entry không chỉ định TTL
-	serializer        func(interface{}) ([]byte, error) // Hàm serialization để chuyển đổi giá trị thành dạng binary
-	deserializer      func([]byte, interface{}) error   // Hàm deserialization để chuyển đổi từ binary
-	hits              int64                             // Số lần cache hit
-	misses            int64                             // Số lần cache miss
-}
-
-// RedisConfig cấu hình cho Redis driver.
-//
-// Cấu trúc này cung cấp các tùy chọn cấu hình chi tiết cho Redis driver
-// như thông tin kết nối, prefix cho key và thời gian sống mặc định.
-type RedisConfig struct {
-	Host              string        // Hostname hoặc IP của Redis server
-	Port              int           // Port của Redis server
-	Password          string        // Mật khẩu xác thực (nếu có)
-	DB                int           // Database index để sử dụng
-	Prefix            string        // Tiền tố cho các key cache
-	DefaultExpiration time.Duration // Thời gian sống mặc định
+type redisDriver struct {
+	client       *redis.Client                     // Redis client để giao tiếp với Redis server
+	prefix       string                            // Tiền tố cho các key cache để tránh xung đột
+	default_ttl  time.Duration                     // Thời gian sống mặc định cho các entry không chỉ định TTL
+	serializer   func(interface{}) ([]byte, error) // Hàm serialization để chuyển đổi giá trị thành dạng binary
+	deserializer func([]byte, interface{}) error   // Hàm deserialization để chuyển đổi từ binary
+	hits         int64                             // Số lần cache hit
+	misses       int64                             // Số lần cache miss
 }
 
 // NewRedisDriver tạo một Redis driver mới với cấu hình mặc định.
 //
 // Phương thức này khởi tạo một RedisDriver mới với thông tin kết nối cơ bản.
-// Nó sử dụng cấu hình mặc định cho prefix là "cache:" và defaultExpiration là 5 phút.
+// Nó sử dụng cấu hình mặc định cho prefix là "cache:" và default_ttl là 5 phút.
 //
 // Params:
 //   - host: Hostname hoặc IP của Redis server
@@ -52,53 +49,61 @@ type RedisConfig struct {
 // Returns:
 //   - *RedisDriver: Driver đã được khởi tạo
 //   - error: Lỗi nếu không thể kết nối tới Redis server
-func NewRedisDriver(host string, port int, password string, db int) (*RedisDriver, error) {
-	config := RedisConfig{
-		Host:              host,
-		Port:              port,
-		Password:          password,
-		DB:                db,
-		Prefix:            "cache:",
-		DefaultExpiration: 5 * time.Minute,
+func NewRedisDriver(config config.DriverRedisConfig, redis_manager redisManager.Manager) (RedisDriver, error) {
+	if !config.Enabled {
+		return nil, fmt.Errorf("redis driver is not enabled")
 	}
-	return NewRedisDriverWithConfig(config)
-}
-
-// NewRedisDriverWithConfig tạo một Redis driver mới với cấu hình chi tiết.
-//
-// Phương thức này khởi tạo một RedisDriver mới với cấu hình được cung cấp đầy đủ.
-//
-// Params:
-//   - config: Cấu trúc chứa toàn bộ thông tin cấu hình cho driver
-//
-// Returns:
-//   - *RedisDriver: Driver đã được khởi tạo
-//   - error: Lỗi nếu không thể kết nối tới Redis server
-func NewRedisDriverWithConfig(config RedisConfig) (*RedisDriver, error) {
-	// Tạo Redis client
-	client := redis.NewClient(&redis.Options{
-		Addr:     fmt.Sprintf("%s:%d", config.Host, config.Port),
-		Password: config.Password,
-		DB:       config.DB,
-	})
-
-	// Kiểm tra kết nối
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err := client.Ping(ctx).Err(); err != nil {
-		return nil, fmt.Errorf("could not connect to Redis: %w", err)
+	client, err := redis_manager.Client()
+	if err != nil {
+		return nil, fmt.Errorf("could not create Redis client: %w", err)
 	}
-
 	// Khởi tạo driver
-	driver := &RedisDriver{
-		client:            client,
-		prefix:            config.Prefix,
-		defaultExpiration: config.DefaultExpiration,
-		serializer:        json.Marshal,
-		deserializer:      json.Unmarshal,
+	driver := &redisDriver{
+		client:       client,
+		prefix:       "cache:", // Tiền tố mặc định
+		default_ttl:  time.Duration(config.DefaultTTL) * time.Second,
+		serializer:   json.Marshal,
+		deserializer: json.Unmarshal,
+		hits:         0,
+		misses:       0,
 	}
+	switch config.Serializer {
 
+	case "gob":
+		driver.serializer = func(v interface{}) ([]byte, error) {
+			var buf bytes.Buffer
+			enc := gob.NewEncoder(&buf)
+			if err := enc.Encode(v); err != nil {
+				return nil, fmt.Errorf("could not serialize value: %w", err)
+			}
+			return buf.Bytes(), nil
+		}
+		driver.deserializer = func(data []byte, v interface{}) error {
+			buf := bytes.NewBuffer(data)
+			dec := gob.NewDecoder(buf)
+			if err := dec.Decode(v); err != nil {
+				return fmt.Errorf("could not deserialize value: %w", err)
+			}
+			return nil
+		}
+	case "msgpack":
+		driver.serializer = func(v interface{}) ([]byte, error) {
+			data, err := msgpack.Marshal(v)
+			if err != nil {
+				return nil, fmt.Errorf("could not serialize value: %w", err)
+			}
+			return data, nil
+		}
+		driver.deserializer = func(data []byte, v interface{}) error {
+			if err := msgpack.Unmarshal(data, v); err != nil {
+				return fmt.Errorf("could not deserialize value: %w", err)
+			}
+			return nil
+		}
+	default:
+		driver.serializer = json.Marshal
+		driver.deserializer = json.Unmarshal
+	}
 	return driver, nil
 }
 
@@ -112,25 +117,12 @@ func NewRedisDriverWithConfig(config RedisConfig) (*RedisDriver, error) {
 //
 // Returns:
 //   - string: Redis key đã được thêm tiền tố
-func (d *RedisDriver) prefixKey(key string) string {
+func (d *redisDriver) prefixKey(key string) string {
 	return d.prefix + key
 }
 
 // Get lấy một giá trị từ cache.
-//
-// Phương thức này lấy và giải mã giá trị từ Redis dựa trên key được cung cấp.
-// Nếu key không tồn tại hoặc đã hết hạn, phương thức trả về false ở giá trị thứ hai
-// và cập nhật bộ đếm miss. Nếu tìm thấy, phương thức trả về giá trị đã giải mã
-// và cập nhật bộ đếm hit.
-//
-// Params:
-//   - ctx: Context để kiểm soát thời gian thực thi của thao tác
-//   - key: Cache key cần lấy
-//
-// Returns:
-//   - interface{}: Giá trị được lưu trong cache (nil nếu không tìm thấy)
-//   - bool: true nếu tìm thấy key, false nếu ngược lại
-func (d *RedisDriver) Get(ctx context.Context, key string) (interface{}, bool) {
+func (d *redisDriver) Get(ctx context.Context, key string) (interface{}, bool) {
 	prefixedKey := d.prefixKey(key)
 
 	// Lấy giá trị từ Redis
@@ -144,11 +136,24 @@ func (d *RedisDriver) Get(ctx context.Context, key string) (interface{}, bool) {
 		// Lỗi khác
 		return nil, false
 	}
-
-	// Giải mã dữ liệu
+	// Giải mã dữ liệu - cần xử lý khác nhau tùy theo serializer
 	var value interface{}
-	if err := d.deserializer(data, &value); err != nil {
-		return nil, false
+
+	// For GOB and MSGPACK, we need to decode differently
+	if d.deserializer != nil {
+		// Create a buffer to hold the decoded value
+		var decodedValue interface{}
+		if err := d.deserializer(data, &decodedValue); err != nil {
+			d.misses++
+			return nil, false
+		}
+		value = decodedValue
+	} else {
+		// Fallback to JSON
+		if err := json.Unmarshal(data, &value); err != nil {
+			d.misses++
+			return nil, false
+		}
 	}
 
 	d.hits++
@@ -168,7 +173,7 @@ func (d *RedisDriver) Get(ctx context.Context, key string) (interface{}, bool) {
 //
 // Returns:
 //   - error: Lỗi nếu có trong quá trình mã hóa hoặc lưu trữ
-func (d *RedisDriver) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+func (d *redisDriver) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
 	prefixedKey := d.prefixKey(key)
 
 	// Mã hóa dữ liệu
@@ -179,7 +184,7 @@ func (d *RedisDriver) Set(ctx context.Context, key string, value interface{}, tt
 
 	// Xác định thời gian hết hạn
 	if ttl == 0 {
-		ttl = d.defaultExpiration
+		ttl = d.default_ttl
 	}
 
 	// Lưu vào Redis
@@ -197,7 +202,7 @@ func (d *RedisDriver) Set(ctx context.Context, key string, value interface{}, tt
 //
 // Returns:
 //   - bool: true nếu key tồn tại, false nếu ngược lại
-func (d *RedisDriver) Has(ctx context.Context, key string) bool {
+func (d *redisDriver) Has(ctx context.Context, key string) bool {
 	prefixedKey := d.prefixKey(key)
 	exists, _ := d.client.Exists(ctx, prefixedKey).Result()
 	return exists > 0
@@ -213,7 +218,7 @@ func (d *RedisDriver) Has(ctx context.Context, key string) bool {
 //
 // Returns:
 //   - error: Lỗi nếu có trong quá trình xóa
-func (d *RedisDriver) Delete(ctx context.Context, key string) error {
+func (d *redisDriver) Delete(ctx context.Context, key string) error {
 	prefixedKey := d.prefixKey(key)
 	return d.client.Del(ctx, prefixedKey).Err()
 }
@@ -229,7 +234,7 @@ func (d *RedisDriver) Delete(ctx context.Context, key string) error {
 //
 // Returns:
 //   - error: Lỗi nếu có trong quá trình quét hoặc xóa
-func (d *RedisDriver) Flush(ctx context.Context) error {
+func (d *redisDriver) Flush(ctx context.Context) error {
 	// Tìm tất cả các key có prefix
 	pattern := d.prefix + "*"
 	iter := d.client.Scan(ctx, 0, pattern, 0).Iterator()
@@ -257,7 +262,7 @@ func (d *RedisDriver) Flush(ctx context.Context) error {
 }
 
 // GetMultiple lấy nhiều giá trị từ cache
-func (d *RedisDriver) GetMultiple(ctx context.Context, keys []string) (map[string]interface{}, []string) {
+func (d *redisDriver) GetMultiple(ctx context.Context, keys []string) (map[string]interface{}, []string) {
 	results := make(map[string]interface{})
 	missed := make([]string, 0)
 
@@ -289,9 +294,17 @@ func (d *RedisDriver) GetMultiple(ctx context.Context, keys []string) (map[strin
 			continue
 		}
 
-		if err := d.deserializer([]byte(data), &decoded); err != nil {
-			missed = append(missed, keys[i])
-			continue
+		// Use the same deserialization logic as Get method
+		if d.deserializer != nil {
+			if err := d.deserializer([]byte(data), &decoded); err != nil {
+				missed = append(missed, keys[i])
+				continue
+			}
+		} else {
+			if err := json.Unmarshal([]byte(data), &decoded); err != nil {
+				missed = append(missed, keys[i])
+				continue
+			}
 		}
 
 		results[keys[i]] = decoded
@@ -301,9 +314,9 @@ func (d *RedisDriver) GetMultiple(ctx context.Context, keys []string) (map[strin
 }
 
 // SetMultiple đặt nhiều giá trị vào cache
-func (d *RedisDriver) SetMultiple(ctx context.Context, values map[string]interface{}, ttl time.Duration) error {
+func (d *redisDriver) SetMultiple(ctx context.Context, values map[string]interface{}, ttl time.Duration) error {
 	if ttl == 0 {
-		ttl = d.defaultExpiration
+		ttl = d.default_ttl
 	}
 
 	// Sử dụng pipe để tối ưu hiệu suất
@@ -326,7 +339,7 @@ func (d *RedisDriver) SetMultiple(ctx context.Context, values map[string]interfa
 }
 
 // DeleteMultiple xóa nhiều key khỏi cache
-func (d *RedisDriver) DeleteMultiple(ctx context.Context, keys []string) error {
+func (d *redisDriver) DeleteMultiple(ctx context.Context, keys []string) error {
 	if len(keys) == 0 {
 		return nil
 	}
@@ -342,7 +355,7 @@ func (d *RedisDriver) DeleteMultiple(ctx context.Context, keys []string) error {
 }
 
 // Remember lấy một giá trị từ cache hoặc thực thi callback nếu không tìm thấy
-func (d *RedisDriver) Remember(ctx context.Context, key string, ttl time.Duration, callback func() (interface{}, error)) (interface{}, error) {
+func (d *redisDriver) Remember(ctx context.Context, key string, ttl time.Duration, callback func() (interface{}, error)) (interface{}, error) {
 	// Kiểm tra cache trước
 	value, found := d.Get(ctx, key)
 	if found {
@@ -361,7 +374,7 @@ func (d *RedisDriver) Remember(ctx context.Context, key string, ttl time.Duratio
 }
 
 // Stats trả về thông tin thống kê về cache
-func (d *RedisDriver) Stats(ctx context.Context) map[string]interface{} {
+func (d *redisDriver) Stats(ctx context.Context) map[string]interface{} {
 	// Đếm số lượng key với prefix
 	pattern := d.prefix + "*"
 	count, err := d.client.Keys(ctx, pattern).Result()
@@ -387,15 +400,56 @@ func (d *RedisDriver) Stats(ctx context.Context) map[string]interface{} {
 }
 
 // Close giải phóng tài nguyên của driver
-func (d *RedisDriver) Close() error {
+func (d *redisDriver) Close() error {
 	return d.client.Close()
 }
 
-// WithSerializer thiết lập hàm serializer tùy chỉnh
-func (d *RedisDriver) WithSerializer(serializer func(interface{}) ([]byte, error), deserializer func([]byte, interface{}) error) *RedisDriver {
-	if serializer != nil && deserializer != nil {
-		d.serializer = serializer
-		d.deserializer = deserializer
+// WithSerializer thiết lập serializer theo tên
+func (d *redisDriver) WithSerializer(serializerName string) RedisDriver {
+	newDriver := &redisDriver{
+		client:      d.client,
+		prefix:      d.prefix,
+		default_ttl: d.default_ttl,
+		hits:        d.hits,
+		misses:      d.misses,
 	}
-	return d
+
+	switch serializerName {
+	case "gob":
+		newDriver.serializer = func(v interface{}) ([]byte, error) {
+			var buf bytes.Buffer
+			enc := gob.NewEncoder(&buf)
+			if err := enc.Encode(v); err != nil {
+				return nil, fmt.Errorf("could not serialize value: %w", err)
+			}
+			return buf.Bytes(), nil
+		}
+		newDriver.deserializer = func(data []byte, v interface{}) error {
+			buf := bytes.NewBuffer(data)
+			dec := gob.NewDecoder(buf)
+			if err := dec.Decode(v); err != nil {
+				return fmt.Errorf("could not deserialize value: %w", err)
+			}
+			return nil
+		}
+	case "msgpack":
+		newDriver.serializer = func(v interface{}) ([]byte, error) {
+			data, err := msgpack.Marshal(v)
+			if err != nil {
+				return nil, fmt.Errorf("could not serialize value: %w", err)
+			}
+			return data, nil
+		}
+		newDriver.deserializer = func(data []byte, v interface{}) error {
+			if err := msgpack.Unmarshal(data, v); err != nil {
+				return fmt.Errorf("could not deserialize value: %w", err)
+			}
+			return nil
+		}
+	default: // json
+		newDriver.serializer = json.Marshal
+		newDriver.deserializer = json.Unmarshal
+	}
+
+	return newDriver
 }

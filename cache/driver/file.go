@@ -10,7 +10,14 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/go-fork/providers/cache/config"
 )
+
+type FileDriver interface {
+	// Driver định nghĩa các phương thức cần thiết cho một cache driver.
+	Driver
+}
 
 // FileDriver cài đặt cache driver sử dụng file system.
 //
@@ -18,7 +25,7 @@ import (
 // với mỗi cache entry tương ứng với một file riêng biệt. Driver này thích hợp
 // cho các ứng dụng cần persistence và có thể phục hồi dữ liệu cache sau khi khởi động lại.
 // Nó cũng hỗ trợ TTL (Time To Live) và tự động dọn dẹp các entry đã hết hạn.
-type FileDriver struct {
+type fileDriver struct {
 	directory         string        // Đường dẫn thư mục lưu trữ cache
 	defaultExpiration time.Duration // Thời gian sống mặc định cho các entry không chỉ định TTL
 	mu                sync.RWMutex  // Mutex cho các thao tác thread-safe
@@ -49,38 +56,21 @@ type FileCache struct {
 // Returns:
 //   - *FileDriver: Driver đã được khởi tạo
 //   - error: Lỗi nếu không thể tạo thư mục cache
-func NewFileDriver(directory string) (*FileDriver, error) {
-	return NewFileDriverWithOptions(directory, 5*time.Minute, 10*time.Minute)
-}
-
-// NewFileDriverWithOptions tạo một file driver mới với các tùy chọn chi tiết.
-//
-// Phương thức này khởi tạo một FileDriver mới với thư mục lưu trữ và các tùy chọn
-// thời gian hết hạn mặc định và khoảng thời gian dọn dẹp được chỉ định.
-//
-// Params:
-//   - directory: Đường dẫn thư mục để lưu trữ các file cache
-//   - defaultExpiration: Thời gian sống mặc định cho các cache entry không chỉ định TTL
-//   - cleanupInterval: Khoảng thời gian giữa các lần dọn dẹp tự động
-//
-// Returns:
-//   - *FileDriver: Driver đã được khởi tạo
-//   - error: Lỗi nếu không thể tạo thư mục cache
-func NewFileDriverWithOptions(directory string, defaultExpiration, cleanupInterval time.Duration) (*FileDriver, error) {
+func NewFileDriver(cfg config.DriverFileConfig) (FileDriver, error) {
 	// Tạo thư mục nếu không tồn tại
-	if err := os.MkdirAll(directory, 0755); err != nil {
+	if err := os.MkdirAll(cfg.Path, 0755); err != nil {
 		return nil, fmt.Errorf("unable to create cache directory: %w", err)
 	}
 
-	driver := &FileDriver{
-		directory:         directory,
-		defaultExpiration: defaultExpiration,
-		janitorInterval:   cleanupInterval,
+	driver := &fileDriver{
+		directory:         cfg.Path,
+		defaultExpiration: time.Duration(cfg.DefaultTTL) * time.Second,
+		janitorInterval:   time.Duration(cfg.CleanupInterval) * time.Second,
 		stopJanitor:       make(chan bool),
 	}
 
 	// Chỉ chạy janitor nếu có khoảng thời gian dọn dẹp > 0
-	if cleanupInterval > 0 {
+	if cfg.CleanupInterval > 0 {
 		go driver.startJanitor()
 		driver.janitorRunning = true
 	}
@@ -99,7 +89,7 @@ func NewFileDriverWithOptions(directory string, defaultExpiration, cleanupInterv
 //
 // Returns:
 //   - string: Đường dẫn đầy đủ đến file cache
-func (d *FileDriver) keyToFilename(key string) (string, error) {
+func (d *fileDriver) keyToFilename(key string) (string, error) {
 	if key == "" {
 		return "", fmt.Errorf("invalid key: key is empty")
 	}
@@ -130,7 +120,7 @@ func (d *FileDriver) keyToFilename(key string) (string, error) {
 // Returns:
 //   - interface{}: Giá trị được lưu trong cache (nil nếu không tìm thấy)
 //   - bool: true nếu tìm thấy key và chưa hết hạn, false nếu ngược lại
-func (d *FileDriver) Get(ctx context.Context, key string) (interface{}, bool) {
+func (d *fileDriver) Get(ctx context.Context, key string) (interface{}, bool) {
 	filename, err := d.keyToFilename(key)
 	if err != nil {
 		d.mu.Lock()
@@ -196,7 +186,7 @@ func (d *FileDriver) Get(ctx context.Context, key string) (interface{}, bool) {
 //
 // Returns:
 //   - error: Lỗi nếu có trong quá trình tạo, mã hóa hoặc ghi file
-func (d *FileDriver) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+func (d *fileDriver) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
 	filename, err := d.keyToFilename(key)
 	if err != nil {
 		return err
@@ -240,7 +230,7 @@ func (d *FileDriver) Set(ctx context.Context, key string, value interface{}, ttl
 //
 // Returns:
 //   - bool: true nếu key tồn tại và chưa hết hạn, false nếu ngược lại
-func (d *FileDriver) Has(ctx context.Context, key string) bool {
+func (d *fileDriver) Has(ctx context.Context, key string) bool {
 	_, exists := d.Get(ctx, key)
 	return exists
 }
@@ -256,7 +246,7 @@ func (d *FileDriver) Has(ctx context.Context, key string) bool {
 //
 // Returns:
 //   - error: Lỗi nếu có trong quá trình xóa file
-func (d *FileDriver) Delete(ctx context.Context, key string) error {
+func (d *fileDriver) Delete(ctx context.Context, key string) error {
 	filename, err := d.keyToFilename(key)
 	if err != nil {
 		return err
@@ -276,7 +266,7 @@ func (d *FileDriver) Delete(ctx context.Context, key string) error {
 //
 // Returns:
 //   - error: Lỗi nếu có trong quá trình xóa files
-func (d *FileDriver) Flush(ctx context.Context) error {
+func (d *fileDriver) Flush(ctx context.Context) error {
 	dir, err := os.Open(d.directory)
 	if err != nil {
 		return err
@@ -313,7 +303,7 @@ func (d *FileDriver) Flush(ctx context.Context) error {
 // Returns:
 //   - map[string]interface{}: Map chứa các key tìm thấy và giá trị tương ứng
 //   - []string: Danh sách các key không tìm thấy hoặc đã hết hạn
-func (d *FileDriver) GetMultiple(ctx context.Context, keys []string) (map[string]interface{}, []string) {
+func (d *fileDriver) GetMultiple(ctx context.Context, keys []string) (map[string]interface{}, []string) {
 	results := make(map[string]interface{})
 	missed := make([]string, 0)
 
@@ -341,7 +331,7 @@ func (d *FileDriver) GetMultiple(ctx context.Context, keys []string) (map[string
 //
 // Returns:
 //   - error: Lỗi nếu có trong quá trình thực hiện
-func (d *FileDriver) SetMultiple(ctx context.Context, values map[string]interface{}, ttl time.Duration) error {
+func (d *fileDriver) SetMultiple(ctx context.Context, values map[string]interface{}, ttl time.Duration) error {
 	for key, value := range values {
 		if err := d.Set(ctx, key, value, ttl); err != nil {
 			return err
@@ -361,7 +351,7 @@ func (d *FileDriver) SetMultiple(ctx context.Context, values map[string]interfac
 //
 // Returns:
 //   - error: Lỗi nếu có trong quá trình thực hiện
-func (d *FileDriver) DeleteMultiple(ctx context.Context, keys []string) error {
+func (d *fileDriver) DeleteMultiple(ctx context.Context, keys []string) error {
 	for _, key := range keys {
 		if err := d.Delete(ctx, key); err != nil {
 			return err
@@ -385,10 +375,14 @@ func (d *FileDriver) DeleteMultiple(ctx context.Context, keys []string) error {
 // Returns:
 //   - interface{}: Giá trị từ cache hoặc từ callback
 //   - error: Lỗi nếu có trong quá trình thực hiện hoặc từ callback
-func (d *FileDriver) Remember(ctx context.Context, key string, ttl time.Duration, callback func() (interface{}, error)) (interface{}, error) {
+func (d *fileDriver) Remember(ctx context.Context, key string, ttl time.Duration, callback func() (interface{}, error)) (interface{}, error) {
 	value, found := d.Get(ctx, key)
 	if found {
 		return value, nil
+	}
+
+	if callback == nil {
+		return nil, fmt.Errorf("callback function is required")
 	}
 
 	value, err := callback()
@@ -413,7 +407,7 @@ func (d *FileDriver) Remember(ctx context.Context, key string, ttl time.Duration
 //
 // Returns:
 //   - map[string]interface{}: Map chứa các thông tin thống kê
-func (d *FileDriver) Stats(ctx context.Context) map[string]interface{} {
+func (d *fileDriver) Stats(ctx context.Context) map[string]interface{} {
 	var itemCount int
 	var size int64
 
@@ -449,7 +443,7 @@ func (d *FileDriver) Stats(ctx context.Context) map[string]interface{} {
 //
 // Returns:
 //   - error: Lỗi nếu có trong quá trình giải phóng tài nguyên
-func (d *FileDriver) Close() error {
+func (d *fileDriver) Close() error {
 	if d.janitorRunning {
 		d.stopJanitor <- true
 	}
@@ -460,7 +454,7 @@ func (d *FileDriver) Close() error {
 //
 // Phương thức này chạy một goroutine định kỳ gọi deleteExpired để
 // xóa các file cache đã hết hạn theo khoảng thời gian đã cấu hình.
-func (d *FileDriver) startJanitor() {
+func (d *fileDriver) startJanitor() {
 	ticker := time.NewTicker(d.janitorInterval)
 	defer ticker.Stop()
 
@@ -478,7 +472,7 @@ func (d *FileDriver) startJanitor() {
 //
 // Phương thức này quét qua tất cả các file trong thư mục cache,
 // đọc thông tin thời gian hết hạn và xóa file nếu đã quá hạn.
-func (d *FileDriver) deleteExpired() {
+func (d *fileDriver) deleteExpired() {
 	now := time.Now().UnixNano()
 	dir, err := os.Open(d.directory)
 	if err != nil {
