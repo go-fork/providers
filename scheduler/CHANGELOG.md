@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## v0.0.5 - 2025-05-29
+
+## Features
+- Add mockery configuration and complete mocks support
+- Generate MockManager for scheduler.Manager interface
+- Support testify mock framework with expecter interface
+- Enable fluent test setup with automatic cleanup
+
+## Added
+- .mockery.yaml configuration file
+- mocks/manager.go with 27 mocked methods
+- Complete interface coverage for testing
+
+## Technical Details
+- Uses mockery v2.53.4+ compatible configuration
+- Follows same pattern as config module
+- Includes with-expecter support for better test experience
+- Automatic mock expectations cleanup in tests"
+
 ## v0.0.4 - 2025-05-28
 
 ### Added
