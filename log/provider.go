@@ -90,3 +90,26 @@ func (p *ServiceProvider) Register(app interface{}) {
 func (p *ServiceProvider) Boot(app interface{}) {
 	// Không yêu cầu thiết lập bổ sung sau khi đăng ký
 }
+
+// Requires trả về danh sách các provider mà log provider phụ thuộc vào.
+//
+// Log provider không có dependency bắt buộc với provider khác, nên phương thức này
+// trả về một slice rỗng.
+//
+// Returns:
+//   - []string: Một slice rỗng vì không có dependencies bắt buộc
+func (p *ServiceProvider) Requires() []string {
+	return []string{} // Không có dependencies bắt buộc
+}
+
+// Providers trả về danh sách các service mà log provider đăng ký.
+//
+// Log provider đăng ký log manager vào container với keys:
+// - "log": Dịch vụ logging chung
+// - "log.manager": Binding đặc biệt cho manager
+//
+// Returns:
+//   - []string: Mảng chứa tên của các services được đăng ký
+func (p *ServiceProvider) Providers() []string {
+	return []string{"log", "log.manager"}
+}

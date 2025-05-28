@@ -789,3 +789,58 @@ func TestExhaustiveBootWithDifferentAppTypes(t *testing.T) {
 		provider.Boot(fullApp)
 	}
 }
+
+// TestServiceProviderRequires kiểm tra method Requires() trả về giá trị đúng
+func TestServiceProviderRequires(t *testing.T) {
+	// Tạo service provider
+	provider := NewServiceProvider()
+
+	// Lấy danh sách dependencies
+	requires := provider.Requires()
+
+	// Log provider không phụ thuộc vào provider nào khác
+	if len(requires) != 0 {
+		t.Errorf("Log provider không nên phụ thuộc vào bất kỳ provider nào, nhận được: %v", requires)
+	}
+}
+
+// TestServiceProviderProviders kiểm tra method Providers() trả về giá trị đúng
+func TestServiceProviderProviders(t *testing.T) {
+	// Tạo service provider
+	provider := NewServiceProvider()
+
+	// Lấy danh sách services được đăng ký
+	providers := provider.Providers()
+
+	// Kiểm tra số lượng services
+	expectedCount := 2
+	if len(providers) != expectedCount {
+		t.Errorf("Provider nên đăng ký đúng %d services, nhận được: %d", expectedCount, len(providers))
+	}
+
+	// Kiểm tra các services cụ thể
+	expectedServices := map[string]bool{
+		"log":         true,
+		"log.manager": true,
+	}
+
+	for _, service := range providers {
+		if _, exists := expectedServices[service]; !exists {
+			t.Errorf("Service không mong đợi trong danh sách providers: %s", service)
+		}
+	}
+
+	// Kiểm tra tất cả services mong đợi đều có mặt
+	for expected := range expectedServices {
+		found := false
+		for _, actual := range providers {
+			if expected == actual {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("Service mong đợi không có trong danh sách providers: %s", expected)
+		}
+	}
+}

@@ -13,9 +13,10 @@ Logging là một phần thiết yếu trong phát triển và vận hành ứng
 - **Thread-safe**: An toàn khi ghi log từ nhiều goroutines cùng lúc.
 - **Hỗ trợ định dạng**: Hỗ trợ chuỗi định dạng kiểu Printf trong các thông điệp log.
 - **Xử lý file linh hoạt**: Tự động xoay vòng file log khi đạt kích thước giới hạn.
-- **Tích hợp DI**: Dễ dàng tích hợp với Dependency Injection container.
+- **Tích hợp DI**: Dễ dàng tích hợp với Dependency Injection container, tương thích đầy đủ với di v0.0.5.
 - **Cấu trúc mở rộng**: Dễ dàng triển khai handler mới cho các output khác.
 - **Truy xuất handler linh hoạt**: Lấy handler đã đăng ký để cấu hình hoặc tùy chỉnh thêm.
+- **Tuân thủ interface ServiceProvider**: Triển khai đầy đủ các methods Requires và Providers cho di v0.0.5.
 
 ## Cấu trúc package
 

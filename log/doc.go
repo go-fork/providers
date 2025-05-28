@@ -65,4 +65,9 @@
 //
 // Interface Manager và triển khai DefaultManager cho các thao tác logging chính.
 // Package handler để tùy chỉnh xử lý output.
+//
+// # Tương thích DI
+//
+// Module này tương thích đầy đủ với github.com/go-fork/di từ phiên bản v0.0.5 trở lên,
+// cài đặt đầy đủ interface ServiceProvider với các phương thức Register, Boot, Requires và Providers.
 package log
