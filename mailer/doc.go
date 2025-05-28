@@ -6,6 +6,11 @@
 // xử lý email qua hàng đợi. Nó được xây dựng dựa trên thư viện gopkg.in/gomail.v2
 // và cung cấp một interface đơn giản, mạnh mẽ và linh hoạt.
 //
+// # Tương thích DI
+//
+// Module này tương thích đầy đủ với github.com/go-fork/di từ phiên bản v0.0.5 trở lên,
+// cài đặt đầy đủ interface ServiceProvider với các phương thức Register, Boot, Requires và Providers.
+//
 // Ví dụ sử dụng cơ bản:
 //
 //	// Đăng ký service provider

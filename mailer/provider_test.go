@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-fork/di"
 	"github.com/go-fork/providers/config/mocks"
+	"github.com/stretchr/testify/mock"
 )
 
 func TestNewServiceProvider(t *testing.T) {
@@ -23,16 +24,45 @@ func TestNewServiceProvider(t *testing.T) {
 	}
 }
 
-func TestServiceProvider_Provides(t *testing.T) {
+func TestServiceProvider_Providers(t *testing.T) {
 	provider := NewServiceProvider()
 
-	// Test that the provider can be registered (ServiceProvider interface doesn't have Provides method)
-	// Instead, we'll test that the provider properly implements the interface
-	var _ di.ServiceProvider = provider
+	// Kiểm tra danh sách providers được trả về
+	providers := provider.Providers()
 
-	// Test that it's the correct type
-	if _, ok := provider.(*ServiceProvider); !ok {
-		t.Error("Provider should be *ServiceProvider type")
+	// Kiểm tra số lượng providers
+	expectedServices := 2
+	if len(providers) != expectedServices {
+		t.Errorf("Providers() should return %d services, got %d", expectedServices, len(providers))
+	}
+
+	// Kiểm tra tên các services
+	expectedNames := map[string]bool{
+		"mailer.manager": true,
+		"mailer":         true,
+	}
+
+	for _, service := range providers {
+		if _, ok := expectedNames[service]; !ok {
+			t.Errorf("Unexpected service name in providers: %s", service)
+		}
+	}
+}
+
+func TestServiceProvider_Requires(t *testing.T) {
+	provider := NewServiceProvider()
+
+	// Kiểm tra danh sách dependencies
+	requires := provider.Requires()
+
+	// Kiểm tra số lượng dependencies
+	if len(requires) != 1 {
+		t.Errorf("Requires() should return 1 dependency, got %d", len(requires))
+	}
+
+	// Kiểm tra tên dependency
+	if requires[0] != "config" {
+		t.Errorf("Expected 'config' as required dependency, got %s", requires[0])
 	}
 }
 
@@ -72,8 +102,8 @@ func TestServiceProvider_Register_WithConfigManager_NoMailerConfig(t *testing.T)
 	container := di.New()
 
 	// Register a mock config manager that doesn't have mailer config
-	mockConfigMgr := mocks.NewMockManager()
-	mockConfigMgr.SetHasKey(false)
+	mockConfigMgr := mocks.NewMockManager(t)
+	mockConfigMgr.EXPECT().Has("mailer").Return(false)
 	container.Bind("config", func(c *di.Container) interface{} {
 		return mockConfigMgr
 	})
@@ -95,26 +125,9 @@ func TestServiceProvider_Register_WithValidConfig(t *testing.T) {
 	container := di.New()
 
 	// Register a mock config manager with valid mailer config
-	mockConfigMgr := mocks.NewMockManager()
-	mockConfigMgr.SetHasKey(true)
-	mockConfigMgr.SetConfig(map[string]interface{}{
-		"smtp": map[string]interface{}{
-			"host":         "smtp.example.com",
-			"port":         587,
-			"username":     "user@example.com",
-			"password":     "password123",
-			"encryption":   "tls",
-			"from_address": "test@example.com",
-			"from_name":    "Test Sender",
-			"timeout":      15,
-		},
-		"queue": map[string]interface{}{
-			"enabled":     false,
-			"name":        "test_mailer",
-			"adapter":     "memory",
-			"max_retries": 3,
-		},
-	})
+	mockConfigMgr := mocks.NewMockManager(t)
+	mockConfigMgr.EXPECT().Has("mailer").Return(true)
+	mockConfigMgr.EXPECT().UnmarshalKey("mailer", mock.Anything).Return(nil)
 
 	container.Bind("config", func(c *di.Container) interface{} {
 		return mockConfigMgr
@@ -161,9 +174,9 @@ func TestServiceProvider_Register_ConfigLoadError(t *testing.T) {
 	container := di.New()
 
 	// Register a mock config manager that returns error on unmarshal
-	mockConfigMgr := mocks.NewMockManager()
-	mockConfigMgr.SetHasKey(true)
-	mockConfigMgr.SetUnmarshalError(&customError{"config load failed"})
+	mockConfigMgr := mocks.NewMockManager(t)
+	mockConfigMgr.EXPECT().Has("mailer").Return(true)
+	mockConfigMgr.EXPECT().UnmarshalKey("mailer", mock.Anything).Return(&customError{"config load failed"})
 
 	container.Bind("config", func(c *di.Container) interface{} {
 		return mockConfigMgr
@@ -287,23 +300,26 @@ func TestServiceProvider_FullWorkflow(t *testing.T) {
 	container := di.New()
 
 	// Register a mock config manager with valid mailer config
-	mockConfigMgr := mocks.NewMockManager()
-	mockConfigMgr.SetHasKey(true)
-	// Make sure the queue is truly enabled by setting the value explicitly
-	mockConfigMgr.SetConfig(map[string]interface{}{
-		"smtp": map[string]interface{}{
-			"host":         "localhost",
-			"port":         25,
-			"from_address": "test@example.com",
-			"from_name":    "Test",
-		},
-		"queue": map[string]interface{}{
-			"enabled":     true, // This should be set to true for the test
-			"name":        "test_queue",
-			"adapter":     "memory",
-			"max_retries": 3,
-		},
-	})
+	mockConfigMgr := mocks.NewMockManager(t)
+	mockConfigMgr.EXPECT().Has("mailer").Return(true)
+	mockConfigMgr.EXPECT().UnmarshalKey("mailer", mock.Anything).Run(func(_ string, out interface{}) {
+		if cfg, ok := out.(*Config); ok {
+			*cfg = Config{
+				SMTP: &SMTPConfig{
+					Host:        "localhost",
+					Port:        25,
+					FromAddress: "test@example.com",
+					FromName:    "Test",
+				},
+				Queue: &QueueConfig{
+					Enabled:    true,
+					Name:       "test_queue",
+					Adapter:    "memory",
+					MaxRetries: 3,
+				},
+			}
+		}
+	}).Return(nil)
 
 	container.Bind("config", func(c *di.Container) interface{} {
 		return mockConfigMgr

@@ -107,13 +107,27 @@ func (p *ServiceProvider) Boot(app interface{}) {
 	}
 }
 
-// Provides trả về danh sách các dịch vụ được cung cấp bởi provider.
+// Providers trả về danh sách các dịch vụ được cung cấp bởi provider.
 //
 // Trả về:
 //   - []string: danh sách các khóa dịch vụ mà provider này cung cấp
-func (p *ServiceProvider) Provides() []string {
+func (p *ServiceProvider) Providers() []string {
 	return []string{
 		"mailer.manager",
 		"mailer",
+	}
+}
+
+// Requires trả về danh sách các provider mà mailer provider phụ thuộc vào.
+//
+// Mailer provider phụ thuộc vào config provider để đọc cấu hình mail.
+// Nếu queue được bật, mailer cũng phụ thuộc vào queue provider.
+//
+// Trả về:
+//   - []string: danh sách các provider mà mailer phụ thuộc vào
+func (p *ServiceProvider) Requires() []string {
+	return []string{
+		"config",
+		// queue là optional dependency (chỉ cần khi queue.enabled = true)
 	}
 }

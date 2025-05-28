@@ -4,13 +4,14 @@ Mailer Provider là giải pháp gửi email đơn giản và mạnh mẽ cho �
 
 ## Tính năng nổi bật
 
-- Tích hợp đầy đủ với DI container của ứng dụng
+- Tích hợp đầy đủ với DI container của ứng dụng, tương thích với di v0.0.5
 - API fluent và dễ sử dụng
 - Hỗ trợ gửi cả email văn bản thuần túy và HTML
 - Hỗ trợ render template từ `text/template` và `html/template`
 - Hỗ trợ file đính kèm và nhúng hình ảnh
 - Hỗ trợ xử lý hàng đợi (queue) cho email
 - Dễ dàng test với MockMailer
+- Triển khai đầy đủ các methods Requires và Providers cho di v0.0.5
 
 ## Cài đặt
 

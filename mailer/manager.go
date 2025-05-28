@@ -81,14 +81,12 @@ func NewManagerWithConfig(cfg *Config) (Manager, error) {
 		queueCfg.Server.RetryLimit = queueSettings.MaxRetries
 
 		if queueSettings.QueueAdapter == "redis" {
-			// Cấu hình Redis
-			queueCfg.Adapter.Redis.Address = queueSettings.RedisAddress
-			queueCfg.Adapter.Redis.Password = queueSettings.RedisPassword
-			queueCfg.Adapter.Redis.DB = queueSettings.RedisDB
+			// Cấu hình Redis cho API mới
 			queueCfg.Adapter.Redis.Prefix = queueSettings.QueuePrefix
+			queueCfg.Adapter.Redis.ProviderKey = "redis"
 		}
 
-		m.queueManager = queue.NewManagerWithConfig(queueCfg)
+		m.queueManager = queue.NewManager(queueCfg)
 	}
 
 	return m, nil

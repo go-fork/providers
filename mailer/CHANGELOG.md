@@ -2,7 +2,33 @@
 
 ## [Unreleased]
 
-## v0.0.3 - 2025-05-25
+## [v0.0.5] - 2025-05-29
+
+### Changed
+- Nâng cấp github.com/go-fork/di từ v0.0.4 lên v0.0.5
+- Đổi tên method Provides() thành Providers() để phù hợp với interface di.ServiceProvider v0.0.5
+- Triển khai method Requires() mới cho di.ServiceProvider v0.0.5
+- Cập nhật tài liệu và ghi chú tương thích trong doc.go
+
+### Added
+- Bổ sung các bài test cho methods Providers() và Requires()
+- Thêm thông tin tương thích di v0.0.5 vào README.md
+
+### Fixed
+- Cải thiện cách xử lý lỗi khi loading config
+
+## [v0.0.4] - 2025-05-27
+
+### Added
+- Hỗ trợ proxy SMTP cho các môi trường doanh nghiệp
+- Cải thiện hiệu năng khi gửi email hàng loạt
+- Thêm tùy chọn retry cho các email bị lỗi
+
+### Fixed
+- Sửa lỗi khi gửi attachment có dung lượng lớn
+- Xử lý đúng các kí tự đặc biệt trong tên email
+
+## [v0.0.3] - 2025-05-25
 
 ### Added
 
