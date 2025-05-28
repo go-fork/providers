@@ -1,4 +1,3 @@
-// Package scheduler cung cấp giải pháp lên lịch và chạy các task định kỳ cho ứng dụng Go.
 package scheduler
 
 import "time"
