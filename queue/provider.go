@@ -11,12 +11,22 @@ import (
 	"github.com/go-fork/providers/scheduler"
 )
 
-// ServiceProvider triển khai interface di.ServiceProvider cho các dịch vụ queue.
+type ServiceProvider interface {
+	di.ServiceProvider
+
+	setupQueueScheduledTasks(schedulerManager scheduler.Manager, container *di.Container)
+
+	cleanupFailedJobs(manager Manager, container *di.Container)
+
+	retryFailedJobs(manager Manager, container *di.Container)
+}
+
+// serviceProvider triển khai interface di.serviceProvider cho các dịch vụ queue.
 //
 // Provider này tự động hóa việc đăng ký các dịch vụ queue trong một container
 // dependency injection, thiết lập client và server với các giá trị mặc định hợp lý.
-type ServiceProvider struct {
-	config Config
+type serviceProvider struct {
+	providers []string
 }
 
 // NewServiceProvider tạo một provider dịch vụ queue mới với cấu hình mặc định.
@@ -32,24 +42,8 @@ type ServiceProvider struct {
 //	app := myapp.New()
 //	app.Register(queue.NewServiceProvider())
 func NewServiceProvider() di.ServiceProvider {
-	return &ServiceProvider{
-		config: DefaultConfig(),
-	}
-}
-
-// NewServiceProviderWithConfig tạo một provider dịch vụ queue mới với cấu hình tùy chỉnh.
-//
-// Sử dụng hàm này để tạo một provider với cấu hình tùy chỉnh có thể được đăng ký với
-// một instance di.Container.
-//
-// Tham số:
-//   - config: Config - cấu hình cho dịch vụ queue
-//
-// Trả về:
-//   - di.ServiceProvider: một service provider cho queue
-func NewServiceProviderWithConfig(config Config) di.ServiceProvider {
-	return &ServiceProvider{
-		config: config,
+	return &serviceProvider{
+		providers: []string{"queue"},
 	}
 }
 
@@ -65,12 +59,15 @@ func NewServiceProviderWithConfig(config Config) di.ServiceProvider {
 //
 // Ứng dụng phải triển khai:
 //   - Container() *di.Container
-func (p *ServiceProvider) Register(app interface{}) {
+func (p *serviceProvider) Register(app interface{}) {
 	// Trích xuất container từ ứng dụng
 	if appWithContainer, ok := app.(interface {
 		Container() *di.Container
 	}); ok {
 		c := appWithContainer.Container()
+		if c == nil {
+			return // Không xử lý nếu container nil
+		}
 
 		// Đăng ký scheduler service provider trước nếu chưa có
 		if _, err := c.Make("scheduler"); err != nil {
@@ -79,42 +76,19 @@ func (p *ServiceProvider) Register(app interface{}) {
 		}
 
 		// Kiểm tra xem container đã có config manager chưa
-		configInstance, err := c.Make("config")
-		if err == nil {
-			// Nếu có config manager, thử lấy cấu hình queue
-			if configManager, ok := configInstance.(config.Manager); ok {
-				// Cố gắng load cấu hình từ config manager
-				var queueConfig Config
-				if configManager.Has("queue") {
-					if err := configManager.UnmarshalKey("queue", &queueConfig); err == nil {
-						// Nếu load thành công, sử dụng cấu hình đã load
-						p.config = queueConfig
-					}
-				}
+		configManager := c.MustMake("config").(config.Manager)
+		if configManager != nil {
+			// Cố gắng load cấu hình từ config manager
+			queueConfig := DefaultConfig()
+			if err := configManager.UnmarshalKey("queue", &queueConfig); err != nil {
+				panic(fmt.Sprintf("Failed to load queue config: %v", err))
 			}
-		}
-
-		// Tạo một queue manager mới với scheduler tích hợp
-		manager := NewManagerWithConfig(p.config)
-
-		// Kết nối scheduler với queue manager nếu có
-		if schedulerInstance, err := c.Make("scheduler"); err == nil {
-			if schedulerManager, ok := schedulerInstance.(scheduler.Manager); ok {
-				manager.SetScheduler(schedulerManager)
-				// Note: We don't automatically set scheduler on server here
-				// The server scheduler should be set explicitly when needed
-			}
-		}
-
-		// Đăng ký các thành phần chính
-		c.Instance("queue", manager)                 // Dịch vụ queue manager chung
-		c.Instance("queue.client", manager.Client()) // Binding đặc biệt cho client
-		c.Instance("queue.server", manager.Server()) // Binding đặc biệt cho server
-		c.Instance("queue.manager", manager)         // Binding đặc biệt cho manager
-
-		// Đăng ký các adapter và các thành phần phụ thuộc
-		if p.config.Adapter.Default == "redis" {
-			c.Instance("queue.redis", manager.RedisClient()) // Redis client
+			// Tạo một queue manager mới với container để truy cập Redis provider
+			manager := NewManagerWithContainer(queueConfig, c)
+			c.Instance("queue", manager)         // Dịch vụ queue manager chung
+			c.Instance("queue.manager", manager) // Direct instance instead of alias
+		} else {
+			panic("Config manager is not available in the container")
 		}
 	}
 }
@@ -127,7 +101,7 @@ func (p *ServiceProvider) Register(app interface{}) {
 //
 // Tham số:
 //   - app: interface{} - instance của ứng dụng
-func (p *ServiceProvider) Boot(app interface{}) {
+func (p *serviceProvider) Boot(app interface{}) {
 	if app == nil {
 		return
 	}
@@ -137,58 +111,60 @@ func (p *ServiceProvider) Boot(app interface{}) {
 		Container() *di.Container
 	}); ok {
 		c := appWithContainer.Container()
+		if c == nil {
+			return // Không xử lý nếu container nil
+		}
 
-		// Boot scheduler service provider
-		if schedulerInstance, err := c.Make("scheduler"); err == nil {
-			if schedulerManager, ok := schedulerInstance.(scheduler.Manager); ok {
-				// Set up scheduler on server for delayed task processing
-				if serverInstance, err := c.Make("queue.server"); err == nil {
-					if server, ok := serverInstance.(Server); ok {
-						server.SetScheduler(schedulerManager)
-					}
-				}
+		// Lấy scheduler manager
+		schedulerManager := c.MustMake("scheduler").(scheduler.Manager)
 
-				// Thiết lập các task định kỳ cho queue
-				p.setupQueueScheduledTasks(schedulerManager, c)
+		// Lấy queue manager để có thể set scheduler cho server
+		queueManager := c.MustMake("queue").(Manager)
 
-				// Khởi động scheduler nếu chưa chạy
-				if !schedulerManager.IsRunning() {
-					schedulerManager.StartAsync()
-				}
-			}
+		// Set up scheduler trên server nếu có
+		if server := queueManager.Server(); server != nil {
+			server.SetScheduler(schedulerManager)
+		}
+
+		// Thiết lập các task định kỳ cho queue
+		p.setupQueueScheduledTasks(schedulerManager, c)
+
+		// Khởi động scheduler nếu chưa chạy
+		if !schedulerManager.IsRunning() {
+			schedulerManager.StartAsync()
 		}
 	}
 }
 
 // setupQueueScheduledTasks thiết lập các task định kỳ cho queue system
-func (p *ServiceProvider) setupQueueScheduledTasks(schedulerManager scheduler.Manager, container *di.Container) {
+func (p *serviceProvider) setupQueueScheduledTasks(schedulerManager scheduler.Manager, container *di.Container) {
 	// Task dọn dẹp failed jobs cũ (chạy mỗi giờ)
 	schedulerManager.Every(1).Hours().Do(func() {
-		if queueInstance, err := container.Make("queue.manager"); err == nil {
-			if manager, ok := queueInstance.(Manager); ok {
-				// Thực hiện cleanup logic
-				p.cleanupFailedJobs(manager)
-			}
-		}
+		queueManager := container.MustMake("queue").(Manager)
+		p.cleanupFailedJobs(queueManager, container)
 	})
 
 	// Task retry failed jobs (chạy mỗi 5 phút)
 	schedulerManager.Every(5).Minutes().Do(func() {
-		if queueInstance, err := container.Make("queue.manager"); err == nil {
-			if manager, ok := queueInstance.(Manager); ok {
-				// Thực hiện retry logic
-				p.retryFailedJobs(manager)
-			}
-		}
+		queueManager := container.MustMake("queue").(Manager)
+		p.retryFailedJobs(queueManager, container)
 	})
 }
 
 // cleanupFailedJobs dọn dẹp các failed jobs cũ
-func (p *ServiceProvider) cleanupFailedJobs(manager Manager) {
+func (p *serviceProvider) cleanupFailedJobs(manager Manager, container *di.Container) {
 	ctx := context.Background()
 
+	// Lấy config manager để lấy danh sách queue
+	configManager := container.MustMake("config").(config.Manager)
+	var queueConfig Config
+	if err := configManager.UnmarshalKey("queue", &queueConfig); err != nil {
+		log.Printf("Failed to load queue config for cleanup: %v", err)
+		return
+	}
+
 	// Lấy danh sách các queue từ cấu hình
-	queues := p.config.Server.Queues
+	queues := queueConfig.Server.Queues
 	if len(queues) == 0 {
 		queues = []string{"default"}
 	}
@@ -264,11 +240,19 @@ func (p *ServiceProvider) cleanupFailedJobs(manager Manager) {
 }
 
 // retryFailedJobs thử lại các failed jobs
-func (p *ServiceProvider) retryFailedJobs(manager Manager) {
+func (p *serviceProvider) retryFailedJobs(manager Manager, container *di.Container) {
 	ctx := context.Background()
 
+	// Lấy config manager để lấy danh sách queue
+	configManager := container.MustMake("config").(config.Manager)
+	var queueConfig Config
+	if err := configManager.UnmarshalKey("queue", &queueConfig); err != nil {
+		log.Printf("Failed to load queue config for retry: %v", err)
+		return
+	}
+
 	// Lấy danh sách các queue từ cấu hình
-	queues := p.config.Server.Queues
+	queues := queueConfig.Server.Queues
 	if len(queues) == 0 {
 		queues = []string{"default"}
 	}
@@ -347,4 +331,22 @@ func (p *ServiceProvider) retryFailedJobs(manager Manager) {
 			log.Printf("Moved %d retry tasks to pending queue %s", retryCount, queueName)
 		}
 	}
+}
+
+// Requires trả về danh sách các service provider mà provider này phụ thuộc.
+//
+// Queue provider phụ thuộc vào config, redis và scheduler provider.
+//
+// Trả về:
+//   - []string: danh sách các service provider khác mà provider này yêu cầu
+func (p *serviceProvider) Requires() []string {
+	return []string{"config", "redis", "scheduler"}
+}
+
+// Providers trả về danh sách các dịch vụ được cung cấp bởi provider.
+//
+// Trả về:
+//   - []string: danh sách các khóa dịch vụ mà provider này cung cấp
+func (p *serviceProvider) Providers() []string {
+	return p.providers
 }

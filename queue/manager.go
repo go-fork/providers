@@ -3,15 +3,17 @@ package queue
 import (
 	"time"
 
+	"github.com/go-fork/di"
 	"github.com/go-fork/providers/queue/adapter"
+	"github.com/go-fork/providers/redis"
 	"github.com/go-fork/providers/scheduler"
-	"github.com/redis/go-redis/v9"
+	redisClient "github.com/redis/go-redis/v9"
 )
 
 // Manager định nghĩa interface cho việc quản lý các thành phần queue.
 type Manager interface {
 	// RedisClient trả về Redis client.
-	RedisClient() redis.UniversalClient
+	RedisClient() redisClient.UniversalClient
 
 	// MemoryAdapter trả về memory queue adapter.
 	MemoryAdapter() adapter.QueueAdapter
@@ -38,38 +40,58 @@ type Manager interface {
 // manager quản lý các thành phần trong queue.
 type manager struct {
 	config      Config
+	container   *di.Container
 	client      Client
 	server      Server
 	scheduler   scheduler.Manager
-	redisClient redis.UniversalClient
+	redisClient redisClient.UniversalClient
 	memoryQueue adapter.QueueAdapter
 	redisQueue  adapter.QueueAdapter
 }
 
 // NewManager tạo một manager mới với cấu hình mặc định.
-func NewManager() Manager {
-	return NewManagerWithConfig(DefaultConfig())
-}
-
-// NewManagerWithConfig tạo một manager mới với cấu hình tùy chỉnh.
-func NewManagerWithConfig(config Config) Manager {
+func NewManager(config Config) Manager {
 	return &manager{
 		config: config,
 	}
 }
 
+// NewManagerWithContainer tạo một manager mới với container DI để truy cập Redis provider.
+func NewManagerWithContainer(config Config, container *di.Container) Manager {
+	return &manager{
+		config:    config,
+		container: container,
+	}
+}
+
 // RedisClient trả về Redis client.
-func (m *manager) RedisClient() redis.UniversalClient {
+func (m *manager) RedisClient() redisClient.UniversalClient {
 	if m.redisClient == nil {
-		// Nếu client đã được cung cấp trong cấu hình, sử dụng nó
-		if m.config.Adapter.Redis.Client != nil {
-			m.redisClient = m.config.Adapter.Redis.Client
-		} else {
-			// Tạo client mới dựa trên cấu hình
-			m.redisClient = redis.NewClient(&redis.Options{
-				Addr:     m.config.Adapter.Redis.Address,
-				Password: m.config.Adapter.Redis.Password,
-				DB:       m.config.Adapter.Redis.DB,
+		// Lấy Redis provider từ container
+		if m.container != nil {
+			// Lấy provider key từ config, mặc định là "redis"
+			providerKey := m.config.Adapter.Redis.ProviderKey
+			if providerKey == "" {
+				providerKey = "redis"
+			}
+
+			if redisService, err := m.container.Make(providerKey); err == nil {
+				if redisManager, ok := redisService.(redis.Manager); ok {
+					// Thử lấy universal client trước
+					if universalClient, err := redisManager.UniversalClient(); err == nil {
+						m.redisClient = universalClient
+					} else if client, err := redisManager.Client(); err == nil {
+						// Fallback sang standard client
+						m.redisClient = client
+					}
+				}
+			}
+		}
+
+		// Fallback: tạo client mặc định nếu không có provider
+		if m.redisClient == nil {
+			m.redisClient = redisClient.NewClient(&redisClient.Options{
+				Addr: "localhost:6379",
 			})
 		}
 	}
@@ -87,16 +109,39 @@ func (m *manager) MemoryAdapter() adapter.QueueAdapter {
 // RedisAdapter trả về redis queue adapter.
 func (m *manager) RedisAdapter() adapter.QueueAdapter {
 	if m.redisQueue == nil {
-		// Khởi tạo với client thông thường
-		redisClient := m.RedisClient()
-		redisStdClient, ok := redisClient.(*redis.Client)
-		if !ok {
-			// Fallback cho các trường hợp client không phải là *redis.Client
-			redisStdClient = redis.NewClient(&redis.Options{
-				Addr: m.config.Adapter.Redis.Address,
-			})
+		// Lấy Redis client từ provider
+		universalClient := m.RedisClient()
+
+		// Chuyển đổi universal client thành standard client nếu cần
+		var stdClient *redisClient.Client
+		if client, ok := universalClient.(*redisClient.Client); ok {
+			stdClient = client
+		} else {
+			// Fallback: tạo client mới từ provider
+			if m.container != nil {
+				providerKey := m.config.Adapter.Redis.ProviderKey
+				if providerKey == "" {
+					providerKey = "redis"
+				}
+
+				if redisService, err := m.container.Make(providerKey); err == nil {
+					if redisManager, ok := redisService.(redis.Manager); ok {
+						if client, err := redisManager.Client(); err == nil {
+							stdClient = client
+						}
+					}
+				}
+			}
+
+			// Final fallback
+			if stdClient == nil {
+				stdClient = redisClient.NewClient(&redisClient.Options{
+					Addr: "localhost:6379",
+				})
+			}
 		}
-		m.redisQueue = adapter.NewRedisQueue(redisStdClient, m.config.Adapter.Redis.Prefix)
+
+		m.redisQueue = adapter.NewRedisQueue(stdClient, m.config.Adapter.Redis.Prefix)
 	}
 	return m.redisQueue
 }

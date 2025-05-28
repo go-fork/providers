@@ -3,11 +3,12 @@ module github.com/go-fork/providers/queue
 go 1.23.9
 
 require (
-	github.com/go-fork/di v0.0.4
-	github.com/go-fork/providers/config v0.0.4
-	github.com/go-fork/providers/scheduler v0.0.4
+	github.com/go-fork/di v0.0.5
+	github.com/go-fork/providers/config v0.0.6
+	github.com/go-fork/providers/redis v0.0.1
+	github.com/go-fork/providers/scheduler v0.0.5
 	github.com/go-redis/redismock/v9 v9.2.0
-	github.com/redis/go-redis/v9 v9.8.0
+	github.com/redis/go-redis/v9 v9.9.0
 	github.com/stretchr/testify v1.10.0
 )
 
@@ -37,6 +38,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-// replace github.com/go-fork/providers/scheduler => ../scheduler
-
-// replace github.com/go-fork/providers/config => ../config
+replace github.com/go-fork/providers/scheduler => ../scheduler

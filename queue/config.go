@@ -1,9 +1,5 @@
 package queue
 
-import (
-	"github.com/redis/go-redis/v9"
-)
-
 // Config chứa cấu hình cho queue package.
 type Config struct {
 	// Adapter chứa cấu hình cho các queue adapter.
@@ -37,36 +33,12 @@ type MemoryConfig struct {
 
 // RedisConfig chứa cấu hình cho redis adapter.
 type RedisConfig struct {
-	// Address là địa chỉ của Redis server.
-	Address string `mapstructure:"address"`
-
-	// Password là mật khẩu của Redis server.
-	Password string `mapstructure:"password"`
-
-	// DB là số của Redis database.
-	DB int `mapstructure:"db"`
-
-	// TLS xác định liệu có sử dụng TLS khi kết nối đến Redis server hay không.
-	TLS bool `mapstructure:"tls"`
-
 	// Prefix là tiền tố cho tên của các queue trong Redis.
 	Prefix string `mapstructure:"prefix"`
 
-	// Cluster chứa cấu hình cho Redis cluster.
-	Cluster RedisClusterConfig `mapstructure:"cluster"`
-
-	// Client là Redis client được cấu hình trước đó.
-	// Nếu được cung cấp, các tùy chọn khác sẽ bị bỏ qua.
-	Client redis.UniversalClient `mapstructure:"-"`
-}
-
-// RedisClusterConfig chứa cấu hình cho Redis cluster.
-type RedisClusterConfig struct {
-	// Enabled xác định liệu có sử dụng Redis cluster hay không.
-	Enabled bool `mapstructure:"enabled"`
-
-	// Addresses là danh sách các địa chỉ của Redis cluster.
-	Addresses []string `mapstructure:"addresses"`
+	// ProviderKey là khóa để lấy Redis provider từ DI container.
+	// Mặc định là "redis" nếu không được cấu hình.
+	ProviderKey string `mapstructure:"provider_key"`
 }
 
 // ServerConfig chứa cấu hình cho queue server.
@@ -123,15 +95,8 @@ func DefaultConfig() Config {
 				Prefix: "queue:",
 			},
 			Redis: RedisConfig{
-				Address:  "localhost:6379",
-				Password: "",
-				DB:       0,
-				TLS:      false,
-				Prefix:   "queue:",
-				Cluster: RedisClusterConfig{
-					Enabled:   false,
-					Addresses: []string{"localhost:7000", "localhost:7001", "localhost:7002"},
-				},
+				Prefix:      "queue:",
+				ProviderKey: "redis",
 			},
 		},
 		Server: ServerConfig{

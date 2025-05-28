@@ -183,3 +183,83 @@ func TestApplyOptions(t *testing.T) {
 	assert.Equal(t, processAt, options.ProcessAt)
 	assert.Equal(t, "task-abc-123", options.TaskID)
 }
+
+// TestWithTimeout tests the WithTimeout option
+func TestWithTimeout(t *testing.T) {
+	timeout := 10 * time.Minute
+	options := ApplyOptions(WithTimeout(timeout))
+
+	assert.Equal(t, timeout, options.Timeout, "Timeout should be set correctly")
+}
+
+// TestWithDeadline tests the WithDeadline option
+func TestWithDeadline(t *testing.T) {
+	deadline := time.Now().Add(2 * time.Hour)
+	options := ApplyOptions(WithDeadline(deadline))
+
+	assert.Equal(t, deadline, options.Deadline, "Deadline should be set correctly")
+}
+
+// TestWithDelay tests the WithDelay option
+func TestWithDelay(t *testing.T) {
+	delay := 5 * time.Minute
+	options := ApplyOptions(WithDelay(delay))
+
+	assert.Equal(t, delay, options.Delay, "Delay should be set correctly")
+}
+
+// TestWithTaskID tests the WithTaskID option
+func TestWithTaskID(t *testing.T) {
+	taskID := "custom-task-id-123"
+	options := ApplyOptions(WithTaskID(taskID))
+
+	assert.Equal(t, taskID, options.TaskID, "TaskID should be set correctly")
+}
+
+// TestTaskUnmarshalInvalidJSON tests Unmarshal with invalid JSON
+func TestTaskUnmarshalInvalidJSON(t *testing.T) {
+	task := &Task{
+		Payload: []byte(`invalid json`),
+	}
+
+	var result testPayload
+	err := task.Unmarshal(&result)
+
+	assert.Error(t, err, "Should return error for invalid JSON")
+}
+
+// TestTaskUnmarshalNilTarget tests Unmarshal with nil target
+func TestTaskUnmarshalNilTarget(t *testing.T) {
+	task := &Task{
+		Payload: []byte(`{"name":"test"}`),
+	}
+
+	err := task.Unmarshal(nil)
+
+	assert.Error(t, err, "Should return error for nil target")
+}
+
+// TestNewTaskWithComplexPayload tests NewTask with complex payload
+func TestNewTaskWithComplexPayload(t *testing.T) {
+	complexPayload := map[string]interface{}{
+		"user_id": 123,
+		"email":   "test@example.com",
+		"data": map[string]string{
+			"template": "welcome",
+			"language": "en",
+		},
+		"timestamps": []int64{1234567890, 1234567891},
+	}
+
+	jsonData, err := json.Marshal(complexPayload)
+	require.NoError(t, err)
+
+	task := NewTask("email:complex", jsonData)
+
+	assert.Equal(t, "email:complex", task.Name)
+	assert.Equal(t, jsonData, task.Payload)
+	assert.NotZero(t, task.CreatedAt)
+	assert.NotZero(t, task.ProcessAt)
+	// ID is empty by default in NewTask - it gets generated when enqueued
+	assert.Empty(t, task.ID)
+}

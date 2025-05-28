@@ -1,4 +1,3 @@
-// filepath: /Users/cluster/dev/go/github.com/go-fork/providers/queue/server.go
 package queue
 
 import (
@@ -188,8 +187,13 @@ func (s *queueServer) Stop() error {
 
 	log.Println("Stopping queue worker server...")
 
-	// Gửi tín hiệu stop cho tất cả workers
-	close(s.stopCh)
+	// Gửi tín hiệu stop cho tất cả workers (chỉ close nếu chưa closed)
+	select {
+	case <-s.stopCh:
+		// Channel đã được closed rồi
+	default:
+		close(s.stopCh)
+	}
 
 	// Chờ workers hoàn thành trong thời gian ShutdownTimeout
 	done := make(chan struct{})
@@ -249,7 +253,7 @@ func (s *queueServer) setupDelayedTaskScheduler() {
 	}
 
 	// Thiết lập task định kỳ để kiểm tra delayed tasks (mỗi 30 giây)
-	s.scheduler.Every(30).Seconds().Do(func() {
+	s.scheduler.Every(uint64(30)).Seconds().Do(func() {
 		if s.started {
 			s.processDelayedTasks()
 		}

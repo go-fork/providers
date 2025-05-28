@@ -3,204 +3,167 @@ package queue
 import (
 	"testing"
 
-	"github.com/redis/go-redis/v9"
+	"github.com/go-fork/providers/scheduler/mocks"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
-// TestNewManager tests creation of a new manager with default configuration
-func TestNewManager(t *testing.T) {
-	manager := NewManager()
-
-	assert.NotNil(t, manager, "Manager should not be nil")
-}
-
-// TestNewManagerWithConfig tests creation of a new manager with custom configuration
-func TestNewManagerWithConfig(t *testing.T) {
+// TestManagerScheduler tests the scheduler integration in manager
+func TestManagerScheduler(t *testing.T) {
 	config := Config{
-		Adapter: AdapterConfig{
-			Default: "memory",
-			Memory: MemoryConfig{
-				Prefix: "custom-prefix:",
-			},
+		Server: ServerConfig{
+			DefaultQueue: "default",
+			Concurrency:  5,
 		},
 	}
 
-	manager := NewManagerWithConfig(config)
+	manager := NewManager(config)
 
-	assert.NotNil(t, manager, "Manager should not be nil")
+	// Test scheduler được tạo tự động
+	scheduler := manager.Scheduler()
+	assert.NotNil(t, scheduler, "Scheduler should not be nil")
+
+	// Test scheduler được cache
+	scheduler2 := manager.Scheduler()
+	assert.Same(t, scheduler, scheduler2, "Scheduler should be cached")
+}
+
+// TestManagerSetScheduler tests setting external scheduler
+func TestManagerSetScheduler(t *testing.T) {
+	config := Config{
+		Server: ServerConfig{
+			DefaultQueue: "default",
+			Concurrency:  5,
+		},
+	}
+
+	manager := NewManager(config)
+
+	// Tạo mock scheduler
+	mockScheduler := mocks.NewMockManager(t)
+
+	// Set scheduler từ bên ngoài
+	manager.SetScheduler(mockScheduler)
+
+	// Verify scheduler đã được set
+	scheduler := manager.Scheduler()
+	assert.Same(t, mockScheduler, scheduler, "External scheduler should be used")
+}
+
+// TestManagerSchedulerIntegration tests integration between manager and scheduler
+func TestManagerSchedulerIntegration(t *testing.T) {
+	config := Config{
+		Server: ServerConfig{
+			DefaultQueue: "default",
+			Concurrency:  5,
+		},
+	}
+
+	manager := NewManager(config)
+
+	// Tạo mock scheduler với expectations
+	mockScheduler := mocks.NewMockManager(t)
+
+	// Set up expectations for fluent interface
+	mockScheduler.EXPECT().Every(5).Return(mockScheduler)
+	mockScheduler.EXPECT().Minutes().Return(mockScheduler)
+	mockScheduler.EXPECT().Do(mock.AnythingOfType("func()")).Return(nil, nil)
+
+	// Set mock scheduler
+	manager.SetScheduler(mockScheduler)
+
+	// Test sử dụng scheduler trong queue operations
+	scheduler := manager.Scheduler()
+	_, err := scheduler.Every(5).Minutes().Do(func() {
+		// Mock cleanup task
+	})
+
+	assert.NoError(t, err, "Scheduling task should not return error")
+
+	// Verify all expectations were met
+	mockScheduler.AssertExpectations(t)
 }
 
 // TestManagerRedisClient tests the RedisClient method
 func TestManagerRedisClient(t *testing.T) {
-	// Test with default config
-	manager := NewManager()
-	redisClient := manager.RedisClient()
+	t.Run("creates fallback redis client", func(t *testing.T) {
+		config := Config{
+			Adapter: AdapterConfig{
+				Redis: RedisConfig{
+					Prefix:      "test:",
+					ProviderKey: "redis",
+				},
+			},
+		}
+		manager := NewManager(config)
 
-	assert.NotNil(t, redisClient, "Redis client should not be nil")
+		client := manager.RedisClient()
+		assert.NotNil(t, client, "RedisClient should not be nil")
 
-	// Test with custom config that provides a client
-	customRedisClient := redis.NewClient(&redis.Options{
-		Addr: "custom-redis:6379",
+		// Call again to test caching
+		client2 := manager.RedisClient()
+		assert.Same(t, client, client2, "RedisClient should return the same instance")
 	})
-
-	config := Config{
-		Adapter: AdapterConfig{
-			Redis: RedisConfig{
-				Client: customRedisClient,
-			},
-		},
-	}
-
-	managerWithCustomClient := NewManagerWithConfig(config)
-	resultClient := managerWithCustomClient.RedisClient()
-
-	assert.Same(t, customRedisClient, resultClient, "Should return the custom Redis client")
-}
-
-// TestManagerMemoryAdapter tests the MemoryAdapter method
-func TestManagerMemoryAdapter(t *testing.T) {
-	// Test with default config
-	manager := NewManager()
-	memoryAdapter := manager.MemoryAdapter()
-
-	assert.NotNil(t, memoryAdapter, "Memory adapter should not be nil")
-	// We already know it implements adapter.QueueAdapter as that's the return type
-
-	// Test with custom config
-	config := Config{
-		Adapter: AdapterConfig{
-			Memory: MemoryConfig{
-				Prefix: "custom-prefix:",
-			},
-		},
-	}
-
-	customManager := NewManagerWithConfig(config)
-	customMemoryAdapter := customManager.MemoryAdapter()
-
-	assert.NotNil(t, customMemoryAdapter, "Memory adapter should not be nil")
 }
 
 // TestManagerRedisAdapter tests the RedisAdapter method
 func TestManagerRedisAdapter(t *testing.T) {
-	// Test with default config
-	manager := NewManager()
-	redisAdapter := manager.RedisAdapter()
-
-	assert.NotNil(t, redisAdapter, "Redis adapter should not be nil")
-	// We already know it implements adapter.QueueAdapter as that's the return type
-
-	// Test with custom config
 	config := Config{
 		Adapter: AdapterConfig{
 			Redis: RedisConfig{
-				Prefix: "custom-prefix:",
+				Prefix:      "test:",
+				ProviderKey: "redis",
 			},
 		},
 	}
+	manager := NewManager(config)
 
-	customManager := NewManagerWithConfig(config)
-	customRedisAdapter := customManager.RedisAdapter()
+	adapter := manager.RedisAdapter()
+	assert.NotNil(t, adapter, "RedisAdapter should not be nil")
 
-	assert.NotNil(t, customRedisAdapter, "Redis adapter should not be nil")
-}
-
-// TestManagerAdapter tests the Adapter method
-func TestManagerAdapter(t *testing.T) {
-	// Create a manager with memory as default
-	memoryConfig := Config{
-		Adapter: AdapterConfig{
-			Default: "memory",
-		},
-	}
-	memoryManager := NewManagerWithConfig(memoryConfig)
-
-	// Get the default adapter
-	defaultAdapter := memoryManager.Adapter("")
-	assert.NotNil(t, defaultAdapter, "Default adapter should not be nil")
-
-	// Get specific adapters
-	memoryAdapter := memoryManager.Adapter("memory")
-	assert.NotNil(t, memoryAdapter, "Memory adapter should not be nil")
-
-	redisAdapter := memoryManager.Adapter("redis")
-	assert.NotNil(t, redisAdapter, "Redis adapter should not be nil")
-
-	// Test with unknown adapter type (should default to memory)
-	unknownAdapter := memoryManager.Adapter("unknown")
-	assert.NotNil(t, unknownAdapter, "Unknown adapter should not be nil")
-
-	// Create a manager with redis as default
-	redisConfig := Config{
-		Adapter: AdapterConfig{
-			Default: "redis",
-		},
-	}
-	redisManager := NewManagerWithConfig(redisConfig)
-
-	// Get the default adapter
-	redisDefaultAdapter := redisManager.Adapter("")
-	assert.NotNil(t, redisDefaultAdapter, "Default adapter should not be nil")
+	// Call again to test caching
+	adapter2 := manager.RedisAdapter()
+	assert.Same(t, adapter, adapter2, "RedisAdapter should return the same instance")
 }
 
 // TestManagerClient tests the Client method
 func TestManagerClient(t *testing.T) {
-	// Test with memory adapter as default
-	memoryConfig := Config{
-		Adapter: AdapterConfig{
-			Default: "memory",
-		},
-	}
-	memoryManager := NewManagerWithConfig(memoryConfig)
+	t.Run("creates redis client when default adapter is redis", func(t *testing.T) {
+		config := Config{
+			Adapter: AdapterConfig{
+				Default: "redis",
+				Redis: RedisConfig{
+					Prefix:      "test:",
+					ProviderKey: "redis",
+				},
+			},
+		}
+		manager := NewManager(config)
 
-	memoryClient := memoryManager.Client()
-	assert.NotNil(t, memoryClient, "Client should not be nil")
+		client := manager.Client()
+		assert.NotNil(t, client, "Client should not be nil")
 
-	// Test with redis adapter as default
-	redisConfig := Config{
-		Adapter: AdapterConfig{
-			Default: "redis",
-		},
-	}
-	redisManager := NewManagerWithConfig(redisConfig)
+		// Call again to test caching
+		client2 := manager.Client()
+		assert.Same(t, client, client2, "Client should return the same instance")
+	})
 
-	redisClient := redisManager.Client()
-	assert.NotNil(t, redisClient, "Client should not be nil")
-}
+	t.Run("creates adapter client when default adapter is not redis", func(t *testing.T) {
+		config := Config{
+			Adapter: AdapterConfig{
+				Default: "memory",
+				Memory: MemoryConfig{
+					Prefix: "test:",
+				},
+			},
+		}
+		manager := NewManager(config)
 
-// TestManagerServer tests the Server method
-func TestManagerServer(t *testing.T) {
-	// Test with memory adapter as default
-	memoryConfig := Config{
-		Adapter: AdapterConfig{
-			Default: "memory",
-		},
-		Server: ServerConfig{
-			Concurrency:     3,
-			DefaultQueue:    "test-queue",
-			ShutdownTimeout: 10,
-		},
-	}
-	memoryManager := NewManagerWithConfig(memoryConfig)
+		client := manager.Client()
+		assert.NotNil(t, client, "Client should not be nil")
 
-	memoryServer := memoryManager.Server()
-	assert.NotNil(t, memoryServer, "Server should not be nil")
-	assert.IsType(t, &queueServer{}, memoryServer, "Should return a queue server")
-
-	// Test with redis adapter as default
-	redisConfig := Config{
-		Adapter: AdapterConfig{
-			Default: "redis",
-		},
-		Server: ServerConfig{
-			Concurrency:     5,
-			DefaultQueue:    "priority-queue",
-			ShutdownTimeout: 15,
-		},
-	}
-	redisManager := NewManagerWithConfig(redisConfig)
-
-	redisServer := redisManager.Server()
-	assert.NotNil(t, redisServer, "Server should not be nil")
-	assert.IsType(t, &queueServer{}, redisServer, "Should return a queue server")
+		// Call again to test caching
+		client2 := manager.Client()
+		assert.Same(t, client, client2, "Client should return the same instance")
+	})
 }

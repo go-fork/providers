@@ -1,5 +1,7 @@
 // Package queue cung cấp một service provider để quản lý hàng đợi và
 // xử lý tác vụ bất đồng bộ với thiết kế đơn giản, linh hoạt hỗ trợ cả Redis và bộ nhớ trong.
+// Package đã được nâng cấp để tích hợp hoàn chỉnh với Redis Provider và cung cấp
+// các tính năng Redis nâng cao như priority queues, TTL support, và batch operations.
 //
 // Package này cung cấp APIs để đưa tác vụ vào hàng đợi, lên lịch thực thi
 // tác vụ và xử lý tác vụ qua các handlers đăng ký. Nó hỗ trợ:
@@ -9,7 +11,11 @@
 // - Lên lịch thực thi vào thời điểm cụ thể (scheduled execution)
 // - Xử lý tác vụ song song với mức độ song song có thể cấu hình
 // - Hệ thống thử lại tự động với chiến lược backoff
-// - Ưu tiên giữa các hàng đợi khác nhau
+// - Ưu tiên giữa các hàng đợi khác nhau (queue-level priority)
+// - Priority queues với Redis Sorted Sets (task-level priority)
+// - TTL support cho temporary tasks
+// - Batch operations với Redis pipelines
+// - Queue monitoring và health checks
 // - Hàng đợi trong bộ nhớ cho môi trường phát triển và kiểm thử
 //
 // Package cung cấp ba thành phần chính:
@@ -21,20 +27,35 @@
 // Hỗ trợ hai adapter chính:
 //
 // 1. Redis adapter: Cho môi trường production với khả năng mở rộng cao
+//   - Tích hợp với Redis Provider để centralize configuration
+//   - Enhanced Redis features: priority queues, TTL, pipelines
+//   - Advanced monitoring và health checks
+//
 // 2. Memory adapter: Cho môi trường phát triển và kiểm thử
 //
-// Ví dụ sử dụng:
+// Ví dụ sử dụng với Redis Provider:
 //
-//	// Đăng ký service provider với Redis
-//	app.Register(queue.NewServiceProvider(queue.RedisOptions{
-//	    Addr: "localhost:6379",
-//	}, queue.ServerOptions{
-//	    Concurrency: 10,
-//	    Queues: map[string]int{
-//	        "default": 1,
-//	        "emails":  2,
-//	    },
-//	}))
+//	// Đăng ký service providers
+//	app.Register(config.NewServiceProvider())
+//	app.Register(redis.NewServiceProvider())  // Required cho Redis adapter
+//	app.Register(scheduler.NewServiceProvider())
+//	app.Register(queue.NewServiceProvider())
+//
+//	// Cấu hình trong config/app.yaml
+//	/*
+//	redis:
+//	  default:
+//	    host: "localhost"
+//	    port: 6379
+//	    db: 0
+//
+//	queue:
+//	  adapter:
+//	    default: "redis"
+//	    redis:
+//	      prefix: "queue:"
+//	      provider_key: "default"  # Reference Redis provider
+//	*/
 //
 //	// Sử dụng client để đưa tác vụ vào hàng đợi
 //	client := app.Make("queue.client").(queue.Client)
@@ -42,6 +63,22 @@
 //	    "to":      "user@example.com",
 //	    "subject": "Hello",
 //	}, queue.WithQueue("emails"), queue.WithMaxRetry(3))
+//
+//	// Sử dụng advanced Redis features
+//	manager := app.Make("queue").(queue.Manager)
+//	if redisAdapter, ok := manager.RedisAdapter().(adapter.QueueRedisAdapter); ok {
+//	    // Priority queue
+//	    redisAdapter.EnqueueWithPriority(ctx, "tasks", &task, 10)
+//
+//	    // TTL support
+//	    redisAdapter.EnqueueWithTTL(ctx, "temporary", &task, 1*time.Hour)
+//
+//	    // Batch operations
+//	    redisAdapter.EnqueueWithPipeline(ctx, "batch", tasks)
+//
+//	    // Monitoring
+//	    info, _ := redisAdapter.GetQueueInfo(ctx, "tasks")
+//	}
 //
 //	// Sử dụng server để xử lý tác vụ
 //	server := app.Make("queue.server").(queue.Server)

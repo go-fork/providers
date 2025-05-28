@@ -14,13 +14,8 @@ func TestDefaultConfig(t *testing.T) {
 	assert.Equal(t, "queue:", config.Adapter.Memory.Prefix)
 
 	// Test Redis config
-	assert.Equal(t, "localhost:6379", config.Adapter.Redis.Address)
-	assert.Equal(t, "", config.Adapter.Redis.Password)
-	assert.Equal(t, 0, config.Adapter.Redis.DB)
-	assert.False(t, config.Adapter.Redis.TLS)
 	assert.Equal(t, "queue:", config.Adapter.Redis.Prefix)
-	assert.False(t, config.Adapter.Redis.Cluster.Enabled)
-	assert.Len(t, config.Adapter.Redis.Cluster.Addresses, 3)
+	assert.Equal(t, "redis", config.Adapter.Redis.ProviderKey)
 
 	// Test Server config
 	assert.Equal(t, 10, config.Server.Concurrency)
