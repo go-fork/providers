@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [v0.0.5] - 2025-05-29
+
+### Fixed
+- Fixed resource leak when replacing handlers in AddHandler method
+- Ensured old handlers are properly closed when overwritten
+
 ## [v0.0.4] - 2025-05-29
 
 ### Changed
