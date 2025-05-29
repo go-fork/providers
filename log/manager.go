@@ -223,7 +223,10 @@ func (m *manager) Fatal(message string, args ...interface{}) {
 func (m *manager) AddHandler(name string, handler handler.Handler) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	// Thêm hoặc thay thế handler theo tên
+	// Nếu handler cũ cùng tên tồn tại, đóng lại để tránh leak resource
+	if old, ok := m.handlers[name]; ok {
+		old.Close()
+	}
 	m.handlers[name] = handler
 }
 

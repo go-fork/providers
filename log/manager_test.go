@@ -83,8 +83,7 @@ func TestManagerAddHandler(t *testing.T) {
 		t.Errorf("Handler thứ hai không được thêm vào map")
 	}
 
-	// Ghi đè lên handler cũ - Lưu ý: Theo hiện thực hiện tại, AddHandler
-	// không gọi Close() trên handler cũ khi ghi đè, chỉ đơn giản thay thế nó
+	// Ghi đè lên handler cũ - kiểm tra handler cũ được đóng
 	h3 := &MockHandler{}
 	m.AddHandler("test", h3)
 
@@ -95,6 +94,10 @@ func TestManagerAddHandler(t *testing.T) {
 	}
 	if handler != h3 {
 		t.Error("Handler không được ghi đè đúng cách")
+	}
+	// Kiểm tra handler cũ đã được đóng
+	if !h.CloseCalled {
+		t.Error("Handler cũ không được đóng khi bị ghi đè bởi AddHandler")
 	}
 }
 
