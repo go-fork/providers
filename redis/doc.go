@@ -40,8 +40,8 @@
 // # Phụ thuộc
 //
 // Package này phụ thuộc vào:
-//   - github.com/go-fork/providers/config cho quản lý cấu hình
-//   - github.com/go-fork/di cho dependency injection
+//   - go.fork.vn/providers/config cho quản lý cấu hình
+//   - go.fork.vn/di cho dependency injection
 //   - github.com/redis/go-redis/v9 cho Redis client
 //
 // # Khả năng tùy chỉnh

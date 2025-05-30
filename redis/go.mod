@@ -1,10 +1,10 @@
-module github.com/go-fork/providers/redis
+module go.fork.vn/providers/redis
 
 go 1.23.9
 
 require (
-	github.com/go-fork/di v0.0.5
-	github.com/go-fork/providers/config v0.0.6
+	go.fork.vn/di v0.1.0
+	go.fork.vn/providers/config v0.1.0
 	github.com/redis/go-redis/v9 v9.8.0
 	github.com/stretchr/testify v1.10.0
 )

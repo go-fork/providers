@@ -5,7 +5,7 @@ package mocks
 import (
 	context "context"
 
-	providersredis "github.com/go-fork/providers/redis"
+	providersredis "go.fork.vn/providers/redis"
 	mock "github.com/stretchr/testify/mock"
 
 	redis "github.com/redis/go-redis/v9"

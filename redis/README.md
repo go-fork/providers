@@ -15,7 +15,7 @@ Package này cung cấp một cách đơn giản để cấu hình và quản l�
 ## Cài đặt
 
 ```bash
-go get github.com/go-fork/providers/redis
+go get go.fork.vn/providers/redis
 ```
 
 ## Sử dụng
@@ -25,7 +25,7 @@ go get github.com/go-fork/providers/redis
 ```go
 import (
     "context"
-    "github.com/go-fork/providers/redis"
+    "go.fork.vn/providers/redis"
 )
 
 func main() {
@@ -63,9 +63,9 @@ func main() {
 
 ```go
 import (
-    "github.com/go-fork/di"
-    "github.com/go-fork/providers/redis"
-    "github.com/go-fork/providers/config"
+    "go.fork.vn/di"
+    "go.fork.vn/providers/redis"
+    "go.fork.vn/providers/config"
 )
 
 // Định nghĩa một ứng dụng với container DI
@@ -159,8 +159,8 @@ Package này hỗ trợ mocking thông qua Mockery:
 import (
     "testing"
     
-    "github.com/go-fork/providers/redis"
-    "github.com/go-fork/providers/redis/mocks"
+    "go.fork.vn/providers/redis"
+    "go.fork.vn/providers/redis/mocks"
     "github.com/stretchr/testify/assert"
 )
 
