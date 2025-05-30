@@ -3,10 +3,10 @@ package mongodb
 import (
 	"testing"
 
-	"github.com/go-fork/di"
-	"github.com/go-fork/providers/config/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"go.fork.vn/di"
+	"go.fork.vn/providers/config/mocks"
 )
 
 // mockApp implements the container interface for testing

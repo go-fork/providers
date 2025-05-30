@@ -1,7 +1,7 @@
 with-expecter: true
 keeptree: true
 packages:
-  github.com/go-fork/providers/mongodb:
+  go.fork.vn/providers/mongodb:
     interfaces:
       Manager:
         config:

@@ -17,7 +17,7 @@ MongoDB Provider hỗ trợ:
 ## Cài đặt
 
 ```bash
-go get github.com/go-fork/providers/mongodb
+go get go.fork.vn/providers/mongodb
 ```
 
 ## Cấu hình
@@ -90,9 +90,9 @@ import (
     "log"
     "time"
     
-    "github.com/go-fork/di"
-    "github.com/go-fork/providers/config"
-    "github.com/go-fork/providers/mongodb"
+    "go.fork.vn/di"
+    "go.fork.vn/providers/config"
+    "go.fork.vn/providers/mongodb"
     "go.mongodb.org/mongo-driver/bson"
     "go.mongodb.org/mongo-driver/mongo"
 )
@@ -225,7 +225,7 @@ import (
     "context"
     "github.com/stretchr/testify/assert"
     "github.com/stretchr/testify/mock"
-    "github.com/go-fork/providers/mongodb/mocks"
+    "go.fork.vn/providers/mongodb/mocks"
     "go.mongodb.org/mongo-driver/bson"
     "go.mongodb.org/mongo-driver/mongo"
 )
@@ -326,7 +326,7 @@ import (
     "context"
     "testing"
     
-    "github.com/go-fork/providers/mongodb"
+    "go.fork.vn/providers/mongodb"
     "github.com/stretchr/testify/require"
 )
 

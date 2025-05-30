@@ -7,7 +7,7 @@ import (
 	mock "github.com/stretchr/testify/mock"
 	mongo "go.mongodb.org/mongo-driver/mongo"
 
-	mongodb "github.com/go-fork/providers/mongodb"
+	mongodb "go.fork.vn/providers/mongodb"
 
 	options "go.mongodb.org/mongo-driver/mongo/options"
 )

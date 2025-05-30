@@ -5,6 +5,19 @@ Tất cả những thay đổi đáng chú ý của MongoDB Provider sẽ đư�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 và dự án này tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.1.0] - 2025-05-30
+
+### Changed
+- **BREAKING CHANGE**: Migrated module path from `github.com/go-fork/providers/mongodb` to `go.fork.vn/providers/mongodb`
+- Updated all import statements to use the new module path
+- Migrated to official go.fork.vn domain
+
+### Updated
+- Updated dependency `go.fork.vn/providers/config` to v0.1.0
+- Updated dependency `go.fork.vn/di` to v0.1.0
+- Updated documentation with new module path
+- Updated README.md with new installation instructions
+
 ## [v0.0.2-next] - Unreleased
 
 

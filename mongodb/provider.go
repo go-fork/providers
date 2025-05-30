@@ -1,8 +1,8 @@
 package mongodb
 
 import (
-	"github.com/go-fork/di"
-	"github.com/go-fork/providers/config"
+	"go.fork.vn/di"
+	"go.fork.vn/providers/config"
 )
 
 // ServiceProvider định nghĩa interface cho MongoDB service provider.
