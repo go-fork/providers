@@ -3,8 +3,8 @@ package config
 import (
 	"testing"
 
-	"github.com/go-fork/di"
 	"github.com/stretchr/testify/assert"
+	"go.fork.vn/di"
 )
 
 // mockApp implements the Container() method required by ServiceProvider

@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [v0.1.0] - 2025-05-30
+
+### Changed
+- **BREAKING**: Migrated package module from `github.com/go-fork/providers/config` to `go.fork.vn/providers/config`
+- Updated all import paths and references to use new module address
+- This is a major version release establishing the new stable API under go.fork.vn domain
+
+### Technical Details
+- Module path changed to go.fork.vn/providers/config
+- All documentation and examples updated to reflect new import path
+- Maintains full API compatibility with v0.0.6
+
 ## [v0.0.6] - 2025-05-26
 
 ### Changed
@@ -24,7 +36,7 @@
 ## [v0.0.5] - 2025-05-26
 
 ### Changed
-- Upgraded github.com/go-fork/di dependency from v0.0.4 to v0.0.5
+- Upgraded go.fork.vn/di dependency from v0.0.4 to v0.0.5
 - Implemented new interface methods from di.ServiceProvider: Requires() and Providers()
 - Enhanced test coverage for ServiceProvider implementation
 - Updated documentation in doc.go to reflect new interface methods

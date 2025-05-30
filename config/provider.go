@@ -1,8 +1,7 @@
-// Package config cung cấp giải pháp quản lý cấu hình linh hoạt và mở rộng cho ứng dụng Go.
 package config
 
 import (
-	"github.com/go-fork/di"
+	"go.fork.vn/di"
 )
 
 // ServiceProvider cung cấp cấu hình cho module config và tích hợp với DI container.

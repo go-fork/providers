@@ -84,6 +84,6 @@
 // Package này giúp nhất quán hóa quản lý cấu hình trong ứng dụng Go, tận dụng
 // sức mạnh của Viper và bổ sung các tính năng hữu ích cho ứng dụng hiện đại.
 //
-// Module này tương thích đầy đủ với github.com/go-fork/di từ phiên bản v0.0.5 trở lên,
+// Module này tương thích đầy đủ với go.fork.vn/di từ phiên bản v0.0.5 trở lên,
 // cài đặt đầy đủ interface ServiceProvider với các phương thức Register, Boot, Requires và Providers.
 package config

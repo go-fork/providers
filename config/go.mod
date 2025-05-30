@@ -1,12 +1,12 @@
-module github.com/go-fork/providers/config
+module go.fork.vn/providers/config
 
 go 1.23.9
 
 require (
 	github.com/fsnotify/fsnotify v1.9.0
-	github.com/go-fork/di v0.0.5
 	github.com/spf13/viper v1.20.1
 	github.com/stretchr/testify v1.10.0
+	go.fork.vn/di v0.1.0
 )
 
 require (

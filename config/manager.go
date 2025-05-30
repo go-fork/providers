@@ -1,4 +1,3 @@
-// Package config cung cấp giải pháp quản lý cấu hình linh hoạt và mở rộng cho ứng dụng Go.
 package config
 
 import (

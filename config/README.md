@@ -68,8 +68,8 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/go-fork/di"
-	"github.com/go-fork/providers/config"
+	"go.fork.vn/di"
+	"go.fork.vn/providers/config"
 )
 
 func main() {
@@ -305,7 +305,7 @@ Package `config` cung cấp một MockManager được tạo tự động bởi 
 import (
 	"testing"
 	
-	"github.com/go-fork/providers/config/mocks"
+	"go.fork.vn/providers/config/mocks"
 	"github.com/stretchr/testify/assert"
 )
 
