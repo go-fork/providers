@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-fork/providers/cache/config"
+	"go.fork.vn/providers/cache/config"
 )
 
 type FileDriver interface {

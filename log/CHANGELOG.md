@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [v0.1.0] - 2025-05-30
+
+### Changed
+- **BREAKING**: Migrated module path from `github.com/go-fork/providers/log` to `go.fork.vn/providers/log`
+- Updated all import paths to use new module location
+- This is the first stable release with the new domain structure
+
+### Migration Guide
+To upgrade from v0.0.x to v0.1.0:
+1. Update your import statements from `github.com/go-fork/providers/log` to `go.fork.vn/providers/log`
+2. Update your go.mod file to use the new module path
+3. Run `go mod tidy` to update dependencies
+
 ## [v0.0.5] - 2025-05-29
 
 ### Fixed
@@ -11,7 +24,7 @@
 ## [v0.0.4] - 2025-05-29
 
 ### Changed
-- Upgraded github.com/go-fork/di dependency from v0.0.4 to v0.0.5
+- Upgraded go.fork.vn/di dependency from v0.0.4 to v0.0.5
 - Implemented new interface methods from di.ServiceProvider: Requires() and Providers()
 - Enhanced test coverage for ServiceProvider implementation
 - Updated documentation in doc.go to reflect new interface methods

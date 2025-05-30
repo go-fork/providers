@@ -1,13 +1,13 @@
-module github.com/go-fork/providers/cache
+module go.fork.vn/providers/cache
 
 go 1.23.9
 
 require (
-	github.com/go-fork/di v0.0.5
-	github.com/go-fork/providers/config v0.0.6
-	github.com/go-fork/providers/mongodb v0.0.1
-	github.com/go-fork/providers/redis v0.0.1
-	github.com/redis/go-redis/v9 v9.8.0
+	go.fork.vn/di v0.1.0
+	go.fork.vn/providers/config v0.1.0
+	go.fork.vn/providers/mongodb v0.1.0
+	go.fork.vn/providers/redis v0.1.0
+	github.com/redis/go-redis/v9 v9.9.0
 	github.com/stretchr/testify v1.10.0
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	go.mongodb.org/mongo-driver v1.17.3

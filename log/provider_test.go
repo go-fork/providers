@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/go-fork/di"
-	"github.com/go-fork/providers/log/handler"
+	"go.fork.vn/di"
+	"go.fork.vn/providers/log/handler"
 )
 
 // MockApplication triển khai interface cần thiết cho ServiceProvider

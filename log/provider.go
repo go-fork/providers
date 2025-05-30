@@ -4,8 +4,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/go-fork/di"
-	"github.com/go-fork/providers/log/handler"
+	"go.fork.vn/di"
+	"go.fork.vn/providers/log/handler"
 )
 
 // ServiceProvider triển khai interface di.ServiceProvider cho các dịch vụ logging.

@@ -11,12 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-fork/providers/cache/config"
-	"github.com/go-fork/providers/cache/driver"
-	cacheMocks "github.com/go-fork/providers/cache/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
+	"go.fork.vn/providers/cache/config"
+	"go.fork.vn/providers/cache/driver"
+	cacheMocks "go.fork.vn/providers/cache/mocks"
 )
 
 type FileDriverTestSuite struct {

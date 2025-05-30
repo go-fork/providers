@@ -2,7 +2,7 @@ with-expecter: true
 dir: "mocks"
 outpkg: "mocks"
 packages:
-  "github.com/go-fork/providers/cache":
+  "go.fork.vn/providers/cache":
     interfaces:
       Manager:
         config:
@@ -11,7 +11,7 @@ packages:
           mockname: "MockManager"
           outpkg: "mocks"
           structname: "MockManager"
-  "github.com/go-fork/providers/cache/driver":
+  "go.fork.vn/providers/cache/driver":
     interfaces:
       Driver:
         config:

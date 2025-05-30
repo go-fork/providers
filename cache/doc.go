@@ -40,8 +40,8 @@
 //
 //	import (
 //	    "time"
-//	    "github.com/go-fork/di"
-//	    "github.com/go-fork/providers/cache"
+//	    "go.fork.vn/di"
+//	    "go.fork.vn/providers/cache"
 //	)
 //
 //	func main() {
@@ -69,9 +69,9 @@
 //
 //	import (
 //	    "time"
-//	    "github.com/go-fork/providers/cache"
-//	    "github.com/go-fork/providers/cache/driver"
-//	    "github.com/go-fork/providers/cache/config"
+//	    "go.fork.vn/providers/cache"
+//	    "go.fork.vn/providers/cache/driver"
+//	    "go.fork.vn/providers/cache/config"
 //	)
 //
 //	func main() {
@@ -202,7 +202,7 @@
 //
 // Package cung cấp mocks cho testing:
 //
-//	import "github.com/go-fork/providers/cache/mocks"
+//	import "go.fork.vn/providers/cache/mocks"
 //
 //	func TestCacheFunction(t *testing.T) {
 //	    mockManager := mocks.NewMockManager(t)

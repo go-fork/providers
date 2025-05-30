@@ -1,5 +1,5 @@
-module github.com/go-fork/providers/log
+module go.fork.vn/providers/log
 
 go 1.23.9
 
-require github.com/go-fork/di v0.0.5
+require go.fork.vn/di v0.1.0

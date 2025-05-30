@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/go-fork/providers/log/handler"
+	"go.fork.vn/providers/log/handler"
 )
 
 // Manager định nghĩa interface cho hệ thống logging tập trung.

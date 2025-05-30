@@ -19,7 +19,7 @@ Cache Provider hỗ trợ:
 ## Cài đặt
 
 ```bash
-go get github.com/go-fork/providers/cache
+go get go.fork.vn/providers/cache
 ```
 
 ## Cấu hình
@@ -83,10 +83,10 @@ import (
     "log"
     "time"
     
-    "github.com/go-fork/di"
-    "github.com/go-fork/providers/config"
-    "github.com/go-fork/providers/cache"
-    "github.com/go-fork/providers/cache/driver"
+    "go.fork.vn/di"
+    "go.fork.vn/providers/config"
+    "go.fork.vn/providers/cache"
+    "go.fork.vn/providers/cache/driver"
 )
 
 func main() {
@@ -272,7 +272,7 @@ import (
     "time"
     "github.com/stretchr/testify/assert"
     "github.com/stretchr/testify/mock"
-    "github.com/go-fork/providers/cache/mocks"
+    "go.fork.vn/providers/cache/mocks"
 )
 
 func TestYourFunction(t *testing.T) {
@@ -367,9 +367,9 @@ import (
     "testing"
     "time"
     
-    "github.com/go-fork/providers/cache"
-    "github.com/go-fork/providers/cache/driver"
-    "github.com/go-fork/providers/cache/config"
+    "go.fork.vn/providers/cache"
+    "go.fork.vn/providers/cache/driver"
+    "go.fork.vn/providers/cache/config"
     "github.com/stretchr/testify/require"
 )
 

@@ -3,14 +3,14 @@ package cache
 import (
 	"testing"
 
-	"github.com/go-fork/di"
-	dimocks "github.com/go-fork/di/mocks"
-	"github.com/go-fork/providers/cache/config"
-	configmocks "github.com/go-fork/providers/config/mocks"
-	redismocks "github.com/go-fork/providers/redis/mocks"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"go.fork.vn/di"
+	dimocks "go.fork.vn/di/mocks"
+	"go.fork.vn/providers/cache/config"
+	configmocks "go.fork.vn/providers/config/mocks"
+	redismocks "go.fork.vn/providers/redis/mocks"
 )
 
 func TestServiceProviderRegister(t *testing.T) {

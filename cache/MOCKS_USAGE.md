@@ -16,7 +16,7 @@ Cả hai đều được tạo bởi [mockery](https://github.com/vektra/mockery
 ```go
 import (
     "testing"
-    "github.com/go-fork/providers/cache/mocks"
+    "go.fork.vn/providers/cache/mocks"
 )
 
 func TestSomething(t *testing.T) {

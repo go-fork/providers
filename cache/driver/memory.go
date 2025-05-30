@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-fork/providers/cache/config"
+	"go.fork.vn/providers/cache/config"
 )
 
 // Item đại diện cho một mục trong memory cache.

@@ -7,12 +7,12 @@
 package cache
 
 import (
-	"github.com/go-fork/di"
-	"github.com/go-fork/providers/cache/config"
-	"github.com/go-fork/providers/cache/driver"
-	configService "github.com/go-fork/providers/config"
-	"github.com/go-fork/providers/mongodb"
-	"github.com/go-fork/providers/redis"
+	"go.fork.vn/di"
+	"go.fork.vn/providers/cache/config"
+	"go.fork.vn/providers/cache/driver"
+	configService "go.fork.vn/providers/config"
+	"go.fork.vn/providers/mongodb"
+	"go.fork.vn/providers/redis"
 )
 
 // ServiceProvider là interface cho cache service provider.

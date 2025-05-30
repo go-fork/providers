@@ -68,6 +68,6 @@
 //
 // # Tương thích DI
 //
-// Module này tương thích đầy đủ với github.com/go-fork/di từ phiên bản v0.0.5 trở lên,
+// Module này tương thích đầy đủ với go.fork.vn/di từ phiên bản v0.0.5 trở lên,
 // cài đặt đầy đủ interface ServiceProvider với các phương thức Register, Boot, Requires và Providers.
 package log

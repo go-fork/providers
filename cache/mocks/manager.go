@@ -2,7 +2,7 @@
 package mocks
 
 import (
-	driver "github.com/go-fork/providers/cache/driver"
+	driver "go.fork.vn/providers/cache/driver"
 	mock "github.com/stretchr/testify/mock"
 	time "time"
 )

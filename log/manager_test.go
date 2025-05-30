@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/go-fork/providers/log/handler"
+	"go.fork.vn/providers/log/handler"
 )
 
 // MockHandler triển khai interface handler.Handler để kiểm tra

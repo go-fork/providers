@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/go-fork/providers/cache/config"
-	redisManager "github.com/go-fork/providers/redis"
 	"github.com/redis/go-redis/v9"
 	"github.com/vmihailenco/msgpack/v5"
+	"go.fork.vn/providers/cache/config"
+	redisManager "go.fork.vn/providers/redis"
 )
 
 type RedisDriver interface {

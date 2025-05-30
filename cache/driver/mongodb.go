@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/go-fork/providers/cache/config"
-	"github.com/go-fork/providers/mongodb"
+	"go.fork.vn/providers/cache/config"
+	"go.fork.vn/providers/mongodb"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"

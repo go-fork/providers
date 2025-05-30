@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-fork/providers/cache/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"go.fork.vn/providers/cache/mocks"
 )
 
 // TestNewManager tests the NewManager constructor

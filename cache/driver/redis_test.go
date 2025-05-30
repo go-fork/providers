@@ -7,14 +7,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-fork/providers/cache/config"
-	"github.com/go-fork/providers/cache/driver"
-	cacheMocks "github.com/go-fork/providers/cache/mocks"
-	redisMocks "github.com/go-fork/providers/redis/mocks"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
+	"go.fork.vn/providers/cache/config"
+	"go.fork.vn/providers/cache/driver"
+	cacheMocks "go.fork.vn/providers/cache/mocks"
+	redisMocks "go.fork.vn/providers/redis/mocks"
 )
 
 type RedisDriverTestSuite struct {
